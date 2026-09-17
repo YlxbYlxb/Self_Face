@@ -22,10 +22,11 @@ services:
       - --collation-server=utf8mb4_unicode_ci
     volumes:
       - mysql-data:/var/lib/mysql
-    ports:
-      # 映射到 3307 是为了不和宿主机已装的 MySQL（3306）撞端口；
-      # 生产环境可以整段删掉，只走 compose 内网
-      - "${MYSQL_EXPOSED_PORT:-3307}:3306"
+    # 默认不向宿主机暴露端口：后端走 compose 内网连它。
+    # 暴露到公网等于把数据库端口直接放到互联网上，会被扫描器持续爆破。
+    # 需要在宿主机上用客户端连进来排查时，临时取消下面两行注释。
+    # ports:
+    #   - "${MYSQL_EXPOSED_PORT:-3307}:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
       interval: 10s
@@ -37,6 +38,9 @@ services:
   backend:
     build:
       context: ./backend
+      args:
+        # 国内服务器构建时在 .env 里改成 https://maven.aliyun.com/repository/public
+        MAVEN_MIRROR_URL: ${MAVEN_MIRROR_URL:-https://repo.maven.apache.org/maven2}
     restart: unless-stopped
     depends_on:
       mysql:
@@ -63,6 +67,11 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        # 国内服务器构建时在 .env 里改成 https://registry.npmmirror.com
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+        # 备案号在构建期内联，填了就展示在页面底部；留空则不渲染
+        VITE_ICP_BEIAN: ${ICP_BEIAN:-}
     restart: unless-stopped
     depends_on:
       backend:
@@ -72,8 +81,33 @@ services:
       - "${WEB_PORT:-8090}:80"
     networks: [app]
 
+  # HTTPS 终结层。默认不启动 —— 备案通过、域名解析到本机之后再起：
+  #   docker compose --profile tls up -d
+  # 起来之前必须在 .env 里设置 APP_DOMAIN，Caddy 会自动申请并续期免费证书。
+  # 备案期间不需要它，用 http://IP:8090 访问即可。
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["tls"]
+    restart: unless-stopped
+    environment:
+      # 默认值写成 localhost 而不是留空：留空 Caddy 会因为缺少站点地址直接启动失败，
+      # 那种报错很难看懂。用 localhost 至少容器能起来，日志里能看到证书签发给谁。
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - frontend
+    networks: [app]
+
 volumes:
   mysql-data:
+  caddy-data:
+  caddy-config:
 
 networks:
   app:

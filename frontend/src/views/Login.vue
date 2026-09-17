@@ -3,6 +3,7 @@ import { reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '../stores/user'
+import AppFooter from '../components/AppFooter.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -95,10 +96,12 @@ function switchMode() {
       </div>
 
       <div class="tips">
-        <p>支持导入 112 道高频八股题，覆盖 Java、并发、JVM、MySQL、Redis、网络、操作系统、算法与项目场景。</p>
-        <p>简历分析需要你自己的大模型 API Key，登录后在「设置」里配置。</p>
+        <p>内置 1200+ 道高频八股题，覆盖 Java 基础、集合、并发、JVM、Spring、MySQL、Redis、网络、操作系统、算法、分布式与微服务等 14 个分类。</p>
+        <p>简历分析与模拟面试需要你自己的大模型 API Key，登录后在「设置」里配置。</p>
       </div>
     </div>
+
+    <app-footer />
   </div>
 </template>
 
@@ -106,6 +109,7 @@ function switchMode() {
 .auth {
   min-height: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 40px 20px;

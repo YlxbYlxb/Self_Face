@@ -22,6 +22,7 @@ backend/.env.*
 frontend/.env.local
 frontend/.env.*
 !frontend/.env.local.example
+!frontend/.env.production.example
 
 # 本机私有启动配置（含数据库口令，绝不入库）
 run.local.cmd

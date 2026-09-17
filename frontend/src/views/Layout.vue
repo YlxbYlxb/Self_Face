@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
+import AppFooter from '../components/AppFooter.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -87,6 +88,8 @@ function logout() {
       <el-main>
         <router-view />
       </el-main>
+
+      <app-footer />
     </el-container>
   </el-container>
 </template>

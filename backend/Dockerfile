@@ -2,6 +2,14 @@
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /build
 
+# 国内服务器直连 Maven Central 经常慢到超时，用 build arg 换成国内镜像：
+#   docker compose build --build-arg MAVEN_MIRROR_URL=https://maven.aliyun.com/repository/public
+# 或者写在 .env 里（deploy/deploy.sh 会自动填）。默认走官方源，海外构建无需额外配置。
+ARG MAVEN_MIRROR_URL=https://repo.maven.apache.org/maven2
+RUN mkdir -p /root/.m2 \
+    && printf '<settings><mirrors><mirror><id>build-arg</id><mirrorOf>central</mirrorOf><url>%s</url></mirror></mirrors></settings>' \
+       "$MAVEN_MIRROR_URL" > /root/.m2/settings.xml
+
 # 先只拷 pom 并预热依赖：pom 没变时这一层直接命中缓存，
 # 改业务代码不会触发重新下载全部依赖
 COPY pom.xml .

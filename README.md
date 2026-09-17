@@ -48,6 +48,7 @@ SelfFace/
 │   ├── run.cmd                       Windows 一键启动脚本
 │   └── src/
 │       ├── api/                      接口封装与拦截器
+│       ├── components/               AppFooter：备案号展示（构建期注入，未配置则不渲染）
 │       ├── router/ stores/           路由守卫、登录态
 │       └── views/
 │           ├── Login.vue             登录 / 注册
@@ -65,6 +66,12 @@ SelfFace/
 │   ├── check_security.py             拦截默认密钥 / 明文 Key 等安全红线
 │   ├── mock_llm.py                   本地假模型服务，用于无 Key 跑通 AI 全链路
 │   └── cleanup-verify-data.sh        清理验证脚本产生的测试数据
+├── deploy/                           云服务器部署（步骤见 docs/部署手册.md）
+│   ├── deploy.sh                     一键部署：装 Docker、配镜像源、生成密钥、构建启动
+│   ├── update.sh                     拉取最新代码并重建，附悬空镜像清理
+│   └── Caddyfile                     HTTPS 配置，备案通过后按需启用
+├── docs/
+│   └── 部署手册.md                    从买服务器到域名 HTTPS 的完整流程
 ├── smoke_test.py                     端到端冒烟测试（22 项）
 ├── verify_async_resume.py            异步分析链路验证（无需真实 Key）
 ├── verify_inflight_guard.py          并发守卫验证
@@ -118,7 +125,7 @@ mvn spring-boot:run
 启动成功后会在日志里看到：
 
 ```
-题库就绪：本次新增分类 14 个、题目 1294 道，现共 1294 道
+题库就绪：本次新增分类 14 个、题目 1283 道，现共 1283 道
 ```
 
 ### 2. 启动前端
@@ -150,6 +157,31 @@ npm run dev      # 或双击 run.cmd
 `APP_CRYPTO_KEY`），接口永不回传明文，页面刷新后只显示掩码。
 
 没配 Key 也能正常刷题和复习调度，只有三个 AI 功能（简历分析 / JD 定向题单 / 模拟面试）需要。
+
+## 部署上线
+
+完整流程（买服务器 → 备案 → 域名 + HTTPS）见 **[docs/部署手册.md](docs/部署手册.md)**，这里只给最短路径。
+
+服务器上两条命令即可跑起来：
+
+```bash
+git clone https://github.com/YlxbYlxb/Self_Face.git /opt/selfface
+cd /opt/selfface && sudo bash deploy/deploy.sh
+```
+
+`deploy.sh` 会自动装 Docker、配国内镜像源、生成随机密钥、构建并启动三个容器，跑完打印访问地址。首次构建约 8~15 分钟，小内存机器它会自动补 swap 并改成串行构建。
+
+线上与本机开发的差别：
+
+| 项 | 本机开发 | 线上 |
+|---|---|---|
+| 前端入口 | Vite dev server `:5273` | Nginx 容器，宿主机 `:8090` |
+| 后端端口 | `:8081` 直接可访问 | `:8081` 只在容器内网，流量经 Nginx 转发 |
+| 跨域 | Vite 代理 | 同源代理，`CORS_ALLOWED_ORIGINS` 留空即可 |
+| 密钥 | 内置开发默认值 | **必须**外部注入，否则 prod profile 拒绝启动 |
+| 数据库 | 本机 MySQL `:3306` | 容器内 MySQL，不向宿主机暴露端口 |
+
+备案通过后，在 `.env` 里填 `APP_DOMAIN` 与 `ICP_BEIAN`，再用 `docker compose --profile tls up -d --build` 启用 Caddy 自动 HTTPS。
 
 ## 测试
 
