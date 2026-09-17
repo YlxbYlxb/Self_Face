@@ -1,19 +1,24 @@
-# 换行策略：写进仓库的规则，保证任何人 clone / 下载 ZIP 拿到的都是正确换行
+# 换行策略：写进仓库的规则，保证任何人 clone / 下载 ZIP 拿到的都是正确换行。
 #
-# Windows 批处理（.cmd/.bat）含多行 if ( ... ) 块时，纯 LF 换行会被 cmd.exe 截断，
+# ⚠️ 顺序有意义：git 用「最后一个匹配到的模式」决定属性值，
+#    所以默认规则写在最前面，例外规则必须写在它后面。
+#    反过来写的话，`* eol=lf` 会把 `*.cmd eol=crlf` 覆盖掉 —— 而且
+#    本地看不出任何异常，只有别人下载 ZIP 双击时才会崩。
+
+# 默认：文本一律 LF，连工作区也一起。
+#
+# 只写 `text=auto` 是不够的：Windows 上 core.autocrlf=true 会把检出的文件转成 CRLF，
+# 而 Dockerfile 里的 \ 续行符遇到 CRLF 会解析异常、Caddyfile 的指令也会带上多余字符。
+# 这类问题只在构建时暴露，报错信息毫无指向性。
+* text=auto eol=lf
+
+# Windows 批处理：.cmd/.bat 含多行 if ( ... ) 块时，纯 LF 会被 cmd.exe 截断，
 # 表现为双击一闪而过、什么都没发生。必须固定为 CRLF。
 *.cmd text eol=crlf
 *.bat text eol=crlf
 
-# Shell 脚本必须 LF，否则在 Linux / macOS / Git Bash 下报
-# "bad interpreter: No such file or directory"（\r 被当成解释器路径的一部分）
+# Shell 脚本显式声明 LF，防止将来改动上面的默认规则时被误伤
 *.sh text eol=lf
-
-# 其余文本一律 LF —— 连工作区也一起。
-# 只写 text=auto 是不够的：Windows 上 core.autocrlf=true 会把工作区文件转成 CRLF，
-# 而 Dockerfile 里的 \ 续行符遇到 CRLF 会解析异常、Caddyfile 的指令也会带上多余字符，
-# 这类问题只在构建时暴露且报错信息毫无指向性。
-* text=auto eol=lf
 
 # 二进制文件不做换行转换
 *.jar  binary
