@@ -2,7 +2,7 @@
 
 一个面向校招/实习求职者的八股刷题 + 简历分析平台。五个核心能力：
 
-1. **题库** —— 内置 112 道高频八股题，覆盖 Java 基础、集合、并发、JVM、Spring、MySQL、Redis、计算机网络、操作系统、算法、项目场景共 11 个分类。每题都有结构化的答题要点（不是一句话答案）。支持从 JSON 批量导入扩充，不必改代码。
+1. **题库** —— 内置 **1294 道**高频八股题，覆盖 Java 基础、集合、并发、JVM、Spring、MySQL、Redis、计算机网络、操作系统、算法、项目场景、**分布式与微服务**、**消息队列与性能优化**、**AI 与大模型**共 **14 个分类**。每题都有结构化的答题要点（不是一句话答案），并按难度（易/中/难）与高频标记分层。支持从 JSON 批量导入扩充，不必改代码。
 2. **间隔重复调度（SM-2）** —— 这是这个项目和其他刷题站最不一样的地方。每道题按你的自评维护「下次该复习的时间」，答得越熟间隔拉得越长（1 → 3 → 8 → 22 → 60 天）；答错就归零重来。每天题单先取**到期**的复习题，再补新题，而不是「错题一直刷到对」。
 3. **每日刷题与记录** —— 每天自动组卷 10 题，记录每次作答的掌握程度、你口述的答案与耗时；配套连击天数、掌握率、题库覆盖率、近 14 天趋势、错题本。
 4. **JD 定向题单** —— 贴一段岗位 JD，抽取技术关键词 → 在题库里召回 → 算出**覆盖率**并列出题库覆盖不到的技术点 → 一键把命中的题生成今日题单。
@@ -43,6 +43,7 @@ SelfFace/
 │           ├── application-prod.yml  生产覆盖（日志收敛、SQL 初始化静默）
 │           ├── db/schema.sql         建表脚本，启动时自动执行
 │           └── seed/*.json           题库种子，按标题去重增量导入
+│                                     （01~03 为自有题目，04 由开源文档提取，见 THIRD-PARTY-NOTICES.md）
 ├── frontend/                         Vue 3 应用（默认端口 5273）
 │   ├── run.cmd                       Windows 一键启动脚本
 │   └── src/
@@ -60,6 +61,7 @@ SelfFace/
 │           └── Settings.vue          LLM 配置 + 个人资料
 ├── scripts/                          质量门禁与测试工具
 │   ├── check_seed.py                 校验题库种子字段完整性
+│   ├── import-javaguide.py           从开源文档批量生成题库（可复现的提取管道）
 │   ├── check_security.py             拦截默认密钥 / 明文 Key 等安全红线
 │   ├── mock_llm.py                   本地假模型服务，用于无 Key 跑通 AI 全链路
 │   └── cleanup-verify-data.sh        清理验证脚本产生的测试数据
@@ -116,7 +118,7 @@ mvn spring-boot:run
 启动成功后会在日志里看到：
 
 ```
-题库就绪：本次新增分类 11 个、题目 112 道，现共 112 道
+题库就绪：本次新增分类 14 个、题目 1294 道，现共 1294 道
 ```
 
 ### 2. 启动前端
@@ -322,6 +324,38 @@ LLM 调用失败时会把原因写进 `resume_analysis.error_msg` 并在历史�
 `category` 必须用已有的分类 code（见 `01-java.json` 的 `categories` 段），否则该题会被跳过。新增分类时把 `categories` 段一起写进任意种子文件即可。
 
 关闭自动导入：在 `application.yml` 里把 `app.seed.enabled` 设为 `false`。
+
+### 从开源文档批量生成题目
+
+题库里约九成题目（`04-javaguide.json`，1182 道）提取自 [JavaGuide](https://github.com/Snailclimb/JavaGuide)（Apache-2.0），
+提取规则固化在 `scripts/import-javaguide.py` 里，可复现：
+
+```bash
+# 1) 只拉 Markdown 文档，不拉图片（约 20MB）
+git clone --depth 1 --filter=blob:none --sparse https://github.com/Snailclimb/JavaGuide.git
+cd JavaGuide && git sparse-checkout set docs && cd ..
+
+# 2) 生成题库（先 --dry-run 看统计，确认后再正式写入）
+python scripts/import-javaguide.py --docs ./JavaGuide/docs --dry-run
+python scripts/import-javaguide.py --docs ./JavaGuide/docs
+
+# 3) 结构门禁必须通过
+python scripts/check_seed.py
+```
+
+这个管道解决的几个实际问题，也是它比"直接抓标题"复杂的地方：
+
+| 问题 | 处理方式 |
+|---|---|
+| 文件名不可信 | `sql-questions-01.md` 名为 questions 实为 SQL 教程，靠**题感比**（该层级标题中"像问题"的占比）剔除，阈值 0.40 |
+| 题集与文章要分开处理 | 题集文件（标题数 ≥8 且题感比 ≥0.40）放宽筛选保留名词型标题；知识点文档收紧，只留明确像问题的 |
+| 过短标题没头没尾 | 「堆」「方法区」这类标题自动补上所属章节，变成「运行时数据区域：堆」 |
+| 站内链接会 404 | 相对链接替换为纯文本，外部链接保留 |
+| `answer` 是 TEXT 字段 | 超过 6000 字的答案在段落边界截断并注明是节选 |
+| 同义重复 | 归一化精确匹配 + 相似度 ≥0.82 两级去重 |
+
+> 内容来源、许可证与改动说明见 **[THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)** ——
+> Apache-2.0 允许使用与修改，但必须保留声明，所以这份文件不是可选项。
 
 ## 接口一览
 
