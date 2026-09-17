@@ -1,0 +1,79 @@
+name: selfface
+
+# 用法：
+#   1) cp .env.example .env 并填写三个密钥
+#   2) docker compose up -d --build
+#   3) 浏览器打开 http://localhost:8090
+#
+# 三个密钥没有默认值，缺失时 compose 会直接报错退出，
+# 避免用空密钥或内置开发密钥把服务跑起来。
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME:-selfface}
+      TZ: Asia/Shanghai
+    command:
+      # 中文题干和答案依赖 utf8mb4，默认字符集在旧版本镜像上不一定是它
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      # 映射到 3307 是为了不和宿主机已装的 MySQL（3306）撞端口；
+      # 生产环境可以整段删掉，只走 compose 内网
+      - "${MYSQL_EXPOSED_PORT:-3307}:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [app]
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-selfface}
+      DB_USERNAME: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      # 这两个是 prod profile 强制要求的外部密钥，不设会启动失败
+      JWT_SECRET: ${JWT_SECRET:?请在 .env 中设置 JWT_SECRET}
+      APP_CRYPTO_KEY: ${APP_CRYPTO_KEY:?请在 .env 中设置 APP_CRYPTO_KEY}
+      TZ: Asia/Shanghai
+    volumes:
+      - ./logs:/app/logs
+    # 后端不直接对宿主机暴露端口，所有流量从 Nginx 进来。
+    # 需要用 curl 直接调接口排查时，把下面两行取消注释。
+    # ports:
+    #   - "8081:8081"
+    networks: [app]
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      # 8090 而不是 8080 —— 本机 8080 已被其他项目占用
+      - "${WEB_PORT:-8090}:80"
+    networks: [app]
+
+volumes:
+  mysql-data:
+
+networks:
+  app:

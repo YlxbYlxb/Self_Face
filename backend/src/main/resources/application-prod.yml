@@ -1,0 +1,32 @@
+# 生产环境覆盖项，用 SPRING_PROFILES_ACTIVE=prod 激活。
+# 这里只放「与开发环境不同」的部分，其余继承 application.yml。
+
+spring:
+  sql:
+    init:
+      # schema.sql 里全是 CREATE TABLE IF NOT EXISTS，重复执行是幂等的
+      mode: always
+      continue-on-error: false
+
+server:
+  port: 8081
+  # 收到 SIGTERM 后先停止接收新请求，把在跑的简历分析任务放完
+  shutdown: graceful
+
+app:
+  cors:
+    # 生产环境前端由 Nginx 同源代理，本来就不需要跨域；
+    # 留空即不允许任何跨域来源。若前端部署在别的域名，用 CORS_ALLOWED_ORIGINS 指定。
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+
+logging:
+  level:
+    root: warn
+    com.selfface: info
+  file:
+    name: /app/logs/selfface.log
+  logback:
+    rollingpolicy:
+      max-file-size: 20MB
+      max-history: 14
+      total-size-cap: 500MB

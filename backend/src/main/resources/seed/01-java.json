@@ -1,0 +1,416 @@
+{
+  "categories": [
+    { "code": "java-basic", "name": "Java 基础", "description": "语法、面向对象、常用类库与底层约定", "sortOrder": 1 },
+    { "code": "java-collection", "name": "集合框架", "description": "List / Map / Set 的实现原理与选型", "sortOrder": 2 },
+    { "code": "java-concurrency", "name": "并发编程", "description": "线程、锁、JUC 组件与线程池", "sortOrder": 3 },
+    { "code": "java-jvm", "name": "JVM", "description": "内存结构、垃圾回收、类加载与线上排查", "sortOrder": 4 },
+    { "code": "spring", "name": "Spring 生态", "description": "IoC / AOP、SpringBoot、MyBatis、事务", "sortOrder": 5 },
+    { "code": "mysql", "name": "MySQL", "description": "索引、事务、锁与 SQL 优化", "sortOrder": 6 },
+    { "code": "redis", "name": "Redis", "description": "数据结构、持久化、缓存问题与分布式锁", "sortOrder": 7 },
+    { "code": "network", "name": "计算机网络", "description": "TCP/IP、HTTP、HTTPS 与网络排查", "sortOrder": 8 },
+    { "code": "os", "name": "操作系统", "description": "进程线程、内存管理、IO 模型", "sortOrder": 9 },
+    { "code": "algorithm", "name": "算法与数据结构", "description": "常见数据结构与手写代码题", "sortOrder": 10 },
+    { "code": "project", "name": "项目与场景设计", "description": "项目深挖、场景题与系统设计", "sortOrder": 11 }
+  ],
+  "questions": [
+    {
+      "category": "java-basic",
+      "title": "JDK、JRE、JVM 三者的关系是什么？",
+      "difficulty": 1,
+      "hot": 1,
+      "tags": "JDK,JRE,JVM,基础概念",
+      "answer": "**逐层包含**：\n\n- **JVM**：执行字节码的虚拟机，是「一次编写到处运行」的基石，本身不认识 Java 源码。\n- **JRE** = JVM + 核心类库（java.lang、java.util 等），只能**运行** Java 程序。\n- **JDK** = JRE + 开发工具（javac、jar、jdb、jconsole），用于**开发**。\n\n**一句话答**：写代码装 JDK，只部署运行可以只装 JRE。"
+    },
+    {
+      "category": "java-basic",
+      "title": "== 和 equals 的区别？Integer 比较有什么坑？",
+      "difficulty": 1,
+      "hot": 1,
+      "tags": "equals,==,Integer缓存,装箱",
+      "answer": "**== 比较值**：基本类型比数值，引用类型比内存地址。\n\n**equals 是方法**：Object 默认实现就是 `this == obj`，String、Integer、Date 等重写成了内容比较。\n\n**经典坑**：`Integer.valueOf` 缓存了 -128~127，所以 `Integer a=100,b=100; a==b` 为 true，而换成 200 就是 false。包装类型比较一律用 `equals`，或用 `Objects.equals` 防 NPE。"
+    },
+    {
+      "category": "java-basic",
+      "title": "为什么重写 equals 就必须重写 hashCode？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "equals,hashCode,HashMap",
+      "answer": "**契约**：`equals` 相等的两个对象，`hashCode` 必须相等。\n\n只重写 equals 的后果：两个「逻辑相等」的对象散列值不同，会被分到不同桶，导致 HashMap 中出现重复 key、`contains` 判断失效。\n\n**反向不成立**：hashCode 相同 equals 可以不同（哈希冲突），所以不能只靠 hashCode 判断相等。\n\n**实践**：两个方法基于同一组字段生成，用 IDE 或 `Objects.hash(...)` 一起生成。"
+    },
+    {
+      "category": "java-basic",
+      "title": "String、StringBuilder、StringBuffer 的区别与选型？",
+      "difficulty": 1,
+      "hot": 1,
+      "tags": "String,StringBuilder,StringBuffer,字符串",
+      "answer": "| 类型 | 可变性 | 线程安全 | 性能 |\n|---|---|---|---|\n| String | 不可变 | 安全（不可变） | 拼接时反复创建对象 |\n| StringBuilder | 可变 | 不安全 | 最快 |\n| StringBuffer | 可变 | 方法加 synchronized | 较慢 |\n\n**选型**：常量用 String；单线程拼接（尤其是循环里）用 StringBuilder；多线程共享同一个缓冲区才用 StringBuffer。编译器会把 `\"a\"+\"b\"` 常量折叠，但循环里的 `+=` 会退化成反复 new StringBuilder。"
+    },
+    {
+      "category": "java-basic",
+      "title": "String 为什么被设计成不可变？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "String,不可变,final",
+      "answer": "**实现方式**：类被 `final` 修饰不可继承，内部 `byte[]`（JDK 9+ 压缩字符串前是 `char[]`）是 `private final`，且不提供任何修改内部数组的方法。\n\n**四个理由**：\n1. **共享常量池**：不可变才能安全地被多个引用共享同一实例，省内存。\n2. **hashCode 可缓存**：作为 HashMap key 时不必每次重算。\n3. **线程安全**：多线程读写无需加锁。\n4. **安全性**：作为类加载路径、数据库连接串、URL 参数时不会被中途篡改。"
+    },
+    {
+      "category": "java-basic",
+      "title": "接口和抽象类的区别？实际开发怎么选？",
+      "difficulty": 1,
+      "hot": 1,
+      "tags": "接口,抽象类,面向对象",
+      "answer": "**语法差异**：\n- 抽象类：可有构造器、成员变量、具体方法；单继承。\n- 接口：只有常量与抽象方法（Java 8 起支持 default / static 方法，Java 9 起支持 private 方法）；可多实现。\n\n**语义差异**：抽象类表达「**是什么**」，用于复用状态与实现；接口表达「**能做什么**」，用于定义契约。\n\n**选型**：多个类有共同状态与实现 → 抽象类（模板方法模式）；需要给不相关的类赋予同一能力 → 接口。实际项目中常见组合：接口定义 API，抽象类提供骨架实现。"
+    },
+    {
+      "category": "java-basic",
+      "title": "final、finally、finalize 的区别？",
+      "difficulty": 1,
+      "hot": 0,
+      "tags": "final,finally,finalize",
+      "answer": "**final（修饰符）**：修饰类不可继承；修饰方法不可重写；修饰变量不可重新赋值（引用不可变，但对象内部状态可变）。\n\n**finally（异常处理）**：无论是否抛异常都会执行的收尾块，常用来关流、释放连接。**唯一不执行的情况**：执行了 `System.exit()` 或 JVM 崩溃。\n\n**finalize（Object 的方法）**：GC 回收前调用，执行时机不确定、可能拖慢 GC，**已废弃（deprecated）**。释放资源请用 try-with-resources 或显式 close。"
+    },
+    {
+      "category": "java-basic",
+      "title": "Java 的四种引用类型分别用在什么场景？",
+      "difficulty": 2,
+      "hot": 0,
+      "tags": "强引用,软引用,弱引用,虚引用",
+      "answer": "- **强引用**：普通 `new`，只要可达就绝不回收，OOM 也不回收。\n- **软引用 SoftReference**：内存不足时被回收，适合做**缓存**（如本地图片缓存）。\n- **弱引用 WeakReference**：下一次 GC 必然回收，`ThreadLocalMap` 的 Entry key 用的就是它，也是 `WeakHashMap` 的基础。\n- **虚引用 PhantomReference**：无法通过它取到对象，唯一用途是配合 `ReferenceQueue` 在对象被回收时收到通知，用于管理**堆外内存**（如 DirectByteBuffer 的清理）。"
+    },
+    {
+      "category": "java-basic",
+      "title": "深拷贝和浅拷贝的区别？怎么实现深拷贝？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "深拷贝,浅拷贝,clone,序列化",
+      "answer": "**浅拷贝**：只复制对象本身与基本类型字段，引用类型字段仍指向同一个对象。`Object.clone()` 默认就是浅拷贝，这是最常见的踩坑点——改副本里的 List 会影响原对象。\n\n**深拷贝**：递归复制所有引用对象，两个对象完全独立。\n\n**实现方式**：\n1. 手动递归 clone 每一层（字段多时容易漏）；\n2. 序列化 + 反序列化（Java 原生序列化或 JSON 转换，最省事）；\n3. 构造器逐字段新建。"
+    },
+    {
+      "category": "java-basic",
+      "title": "Java 的异常体系是怎样的？受检和非受检异常怎么选？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "异常,Exception,Error,受检异常",
+      "answer": "**结构**：`Throwable` 分两支——`Error`（JVM 层面问题，如 OOM、StackOverflowError，不该 try-catch）和 `Exception`。\n\n`Exception` 再分：\n- **受检异常**：继承 Exception 但不继承 RuntimeException，编译期强制处理（IOException、SQLException）。\n- **非受检异常**：RuntimeException 及其子类（NPE、IllegalArgumentException），编译期不强制。\n\n**实践**：业务异常统一继承 RuntimeException，避免污染方法签名；受检异常只在调用方确实能恢复时使用；捕获后不要吞掉，至少记录日志。"
+    },
+    {
+      "category": "java-basic",
+      "title": "什么是泛型擦除？带来了哪些限制？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "泛型,类型擦除,TypeReference",
+      "answer": "**擦除**：Java 泛型是编译期语法糖，编译后类型参数被擦除为上界（无界则为 Object）。所以 `List<String>` 与 `List<Integer>` 在运行时是同一个 Class 对象，`new ArrayList<String>().getClass() == new ArrayList<Integer>().getClass()` 为 true。\n\n**限制**：不能 `new T()`、不能 `new T[]`、不能对泛型做 `instanceof`、静态成员不能用类的类型参数、基本类型不能作类型参数。\n\n**绕过**：需要运行时类型信息时传入 `Class<T>`，或在解析 JSON 时使用 `TypeReference<List<User>>` 这类匿名子类保留泛型签名。\n\n> 也正因擦除，`List<String>` 和 `List<Integer>` 的方法签名相同，构成**方法冲突**而非重载。"
+    },
+    {
+      "category": "java-basic",
+      "title": "重载和重写的区别？为什么说重载是编译期决定的？",
+      "difficulty": 1,
+      "hot": 0,
+      "tags": "重载,重写,多态",
+      "answer": "**重载 Overload**：同一个类内，方法名相同、**参数列表不同**（类型/个数/顺序），与返回值无关。编译期根据静态类型确定调用哪个方法。\n\n**重写 Override**：父子类之间，方法签名完全一致，运行期通过虚方法表动态绑定（多态）。约束：子类访问权限不能更小，不能抛更宽的受检异常。\n\n**易错**：\n- 只有返回值不同不构成重载，是编译错误。\n- private / static / final 方法不能被重写（static 只能被隐藏）。"
+    },
+    {
+      "category": "java-collection",
+      "title": "ArrayList 和 LinkedList 的区别？实际怎么选？",
+      "difficulty": 1,
+      "hot": 1,
+      "tags": "ArrayList,LinkedList,数组,链表",
+      "answer": "| 维度 | ArrayList | LinkedList |\n|---|---|---|\n| 底层 | 动态数组 | 双向链表 |\n| 随机访问 | O(1) | O(n) |\n| 头部插入删除 | O(n)（要挪元素） | O(1) |\n| 内存 | 紧凑，有预留空间 | 每个节点多两个指针 |\n| CPU 缓存友好度 | 高 | 低 |\n\n**选型**：**绝大多数场景用 ArrayList**。LinkedList 的「增删快」只体现在已有节点引用的头部/中间操作上；而按索引增删要先遍历定位，同样是 O(n)，加上缓存不友好，实测经常比 ArrayList 还慢。LinkedList 真正合适的场景是把它当 Deque 用（`ArrayDeque` 通常更好）。"
+    },
+    {
+      "category": "java-collection",
+      "title": "ArrayList 的扩容机制是怎样的？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "ArrayList,扩容,Arrays.copyOf",
+      "answer": "**初始容量**：`new ArrayList()` 默认是空数组（延迟分配），第一次 `add` 时才扩容到 **10**；`new ArrayList<>(n)` 直接给 n。\n\n**扩容规则**：容量不足时 `newCapacity = oldCapacity + (oldCapacity >> 1)`，即 **1.5 倍**，然后 `Arrays.copyOf` 整体复制。\n\n**关键点**：\n- 扩容是**复制整个数组**，代价 O(n)，所以能预估大小时务必指定初始容量。\n- `ensureCapacity` 可手动预留。\n- 注意与 HashMap 的 2 倍扩容区分（HashMap 要保证容量是 2 的幂）。"
+    },
+    {
+      "category": "java-collection",
+      "title": "HashMap 的底层数据结构是什么？JDK 8 做了哪些改动？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "HashMap,红黑树,链表,数组",
+      "answer": "**JDK 7**：数组 + 链表，头插法。\n\n**JDK 8**：数组 + 链表 + **红黑树**，尾插法。\n\n**为什么改**：\n1. 头插法在并发扩容时会形成**环形链表**导致死循环，尾插法避免了这个（但 HashMap 仍然线程不安全）。\n2. 链表过长时查询退化为 O(n)，转红黑树后为 **O(log n)**。\n\n**结构要点**：table 是 `Node[]`，容量总是 2 的幂；哈希扰动是 `hash = h ^ (h >>> 16)`，让高 16 位也参与运算；树化条件是**链表长度 ≥ 8 且数组长度 ≥ 64**，否则优先扩容。"
+    },
+    {
+      "category": "java-collection",
+      "title": "HashMap 的 put 过程是怎样的？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "HashMap,put,哈希冲突",
+      "answer": "1. 判断 table 是否为空，空则 `resize()` 初始化。\n2. 计算扰动后的 hash：`h ^ (h >>> 16)`，再 `& (n-1)` 定位桶下标。\n3. 桶为空 → 直接新建 Node 放入。\n4. 桶不为空：\n   - key 相同（`hash` 相等且 `==` 或 `equals`）→ **覆盖 value**，返回旧值。\n   - 是树节点 → 走红黑树插入。\n   - 是链表 → 尾插遍历，找到相同 key 则覆盖；没找到则追加，**链表长度达到 8 时尝试树化**。\n5. `++size > threshold` 则 `resize()` 扩容。\n\n**注意**：`threshold = capacity * loadFactor`，默认 16 × 0.75 = 12。"
+    },
+    {
+      "category": "java-collection",
+      "title": "HashMap 为什么线程不安全？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "HashMap,线程安全,并发",
+      "answer": "**JDK 7**：并发扩容时头插法会形成**环形链表**，导致后续 get 进入死循环、CPU 100%。\n\n**JDK 8** 改成尾插法，避免了环形链表，但仍不安全，典型问题：\n1. **数据覆盖**：两个线程同时 put 到空桶，后写的覆盖先写的（size 和实际元素数不一致）。\n2. **size 计数丢失**：`++size` 不是原子操作。\n3. **扩容期间读到不一致状态**：可能读到 null 或旧值。\n\n**替代**：并发场景用 `ConcurrentHashMap`；需要整体不可变快照时用 `Collections.unmodifiableMap`。"
+    },
+    {
+      "category": "java-collection",
+      "title": "HashMap 的容量为什么必须是 2 的幂？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "HashMap,容量,位运算,扩容",
+      "answer": "**核心原因：把取模换成位运算**。\n\n定位桶时用 `(n - 1) & hash` 代替 `hash % n`。当 n 是 2 的幂时，`n-1` 的二进制全是低位 1，位运算等价于取模且快得多。\n\n如果 n 不是 2 的幂，`n-1` 就会出现 0 位，与运算后某些下标永远取不到，桶浪费、冲突集中。\n\n**扩容 2 倍的妙处**：元素新位置只有两种可能——**原位置**或**原位置 + oldCapacity**，判据只是 `hash & oldCapacity` 是否为 0。JDK 8 借此把 rehash 优化成一次位判断，无需重算 hash，元素要么留在原桶（lo 链）要么移到高位桶（hi 链）。\n\n`HashMap` 通过 `tableSizeFor()` 把任意初始容量向上取整到 2 的幂。"
+    },
+    {
+      "category": "java-collection",
+      "title": "HashMap 链表转红黑树的条件是什么？为什么阈值是 8 和 6？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "HashMap,红黑树,树化,泊松分布",
+      "answer": "**树化条件**：链表长度 ≥ **8** **且** table 长度 ≥ **64**。table 不足 64 时优先扩容而不是树化（扩容能打散冲突，成本更低）。\n\n**为什么是 8**：源码注释给了依据——理想哈希下桶内节点数服从泊松分布，长度达到 8 的概率约 **6×10⁻⁸**。也就是说正常情况下几乎不会树化，**树化只是为了应对哈希被恶意构造的极端情况**，属于兜底。\n\n**为什么退化为 6**：留一个缓冲区间（7 作为中间态），避免在 7、8 之间反复插入删除导致「树化 ↔ 链表化」的抖动。\n\n**红黑树 vs 链表**：树节点占空间约为普通节点的两倍，查询从 O(n) 降为 O(log n)。"
+    },
+    {
+      "category": "java-collection",
+      "title": "ConcurrentHashMap 在 JDK 7 和 JDK 8 中的实现有什么区别？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "ConcurrentHashMap,分段锁,CAS,synchronized",
+      "answer": "**JDK 7：分段锁（Segment）**\n- 结构是 `Segment[]`，每个 Segment 继承 ReentrantLock，内部又是一个 HashEntry 数组。\n- 锁粒度是 **Segment**，默认并发度 16，最多 16 个线程同时写。\n- 缺点：并发度受 Segment 数量限制，内存开销大。\n\n**JDK 8：CAS + synchronized**\n- 取消 Segment，结构直接是 `Node[] + 链表 + 红黑树`。\n- 空桶插入用 **CAS**（无锁）。\n- 桶非空时 **synchronized 锁单个桶的头节点**，锁粒度细化到一个桶。\n- 并发度从 16 提升到**数组长度**，且锁只锁冲突的那条链。\n\n**共同点**：get 全程不加锁（Node 的 val 和 next 用 volatile 保证可见性），size 用 `baseCount + CounterCell[]` 分段计数（JDK 8）/ `sumCount` 近似统计（JDK 7）。"
+    },
+    {
+      "category": "java-collection",
+      "title": "HashMap 和 Hashtable 的区别？为什么 Hashtable 被淘汰？",
+      "difficulty": 1,
+      "hot": 0,
+      "tags": "HashMap,Hashtable,遗留类",
+      "answer": "| 维度 | HashMap | Hashtable |\n|---|---|---|\n| 线程安全 | 不安全 | 安全（方法级 synchronized） |\n| null 支持 | key/value 都可以为 null | 都不允许，否则 NPE |\n| 初始容量 | 16，扩容 2 倍 | 11，扩容 2n+1 |\n| 继承 | AbstractMap | Dictionary（遗留类） |\n\n**为什么淘汰**：它是**方法级 synchronized**，整个表一把锁，并发性能极差；迭代器还是 fail-fast 的。JDK 5 引入 `ConcurrentHashMap` 后就没有使用场景了——需要并发用 ConcurrentHashMap，单线程用 HashMap，需要全局同步语义可以用 `Collections.synchronizedMap`。"
+    },
+    {
+      "category": "java-collection",
+      "title": "HashSet 是如何保证元素不重复的？",
+      "difficulty": 1,
+      "hot": 0,
+      "tags": "HashSet,HashMap,去重",
+      "answer": "**HashSet 内部就是一个 HashMap**，元素作为 key，value 统一放一个静态的 `PRESENT` 哑对象。\n\n所以去重逻辑完全由 HashMap 决定：`add(e)` 实际是 `map.put(e, PRESENT) == null`——**如果 put 返回了旧值，说明 key 已存在，add 返回 false**。\n\n**推论**：\n- 存入的对象必须正确重写 `hashCode` 和 `equals`，否则「内容相同」的对象会被当成不同元素。\n- HashSet 不保证顺序（无序），要顺序用 `LinkedHashSet`，要排序用 `TreeSet`。"
+    },
+    {
+      "category": "java-collection",
+      "title": "什么是 fail-fast 和 fail-safe？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "fail-fast,fail-safe,ConcurrentModificationException",
+      "answer": "**fail-fast（快速失败）**：迭代过程中检测到结构被修改就立即抛 `ConcurrentModificationException`。\n\n实现：集合维护 `modCount`，迭代器每次 `next()` 都检查 `expectedModCount != modCount`。`ArrayList`、`HashMap` 的迭代器都是这种。\n\n> 注意：用 `iterator.remove()` 是安全的（它会同步 expectedModCount）；用集合自己的 `remove()` 就炸。\n\n**fail-safe（安全失败）**：迭代时操作的是**副本**，不会抛异常，但也**看不到最新数据、可能读到旧值**。`CopyOnWriteArrayList`（写时复制）、`ConcurrentHashMap` 的弱一致迭代器属于这类。\n\n**选择**：读多写少且要求遍历绝对安全 → CopyOnWriteArrayList；高并发读写 → ConcurrentHashMap。"
+    },
+    {
+      "category": "java-collection",
+      "title": "LinkedHashMap 如何实现 LRU 缓存？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "LinkedHashMap,LRU,accessOrder",
+      "answer": "**关键在 accessOrder 参数**：\n\n- `new LinkedHashMap<>(16, 0.75f, **false**)`：按**插入顺序**维护双向链表（默认）。\n- `new LinkedHashMap<>(16, 0.75f, **true**)`：按**访问顺序**维护——每次 `get`/`put` 都会把该节点移到链表尾部。\n\n**实现 LRU 只需继承并重写一个方法**：\n\n```java\nclass LruCache<K, V> extends LinkedHashMap<K, V> {\n    private final int capacity;\n    LruCache(int capacity) {\n        super(16, 0.75f, true);\n        this.capacity = capacity;\n    }\n    @Override\n    protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {\n        return size() > capacity;  // 返回 true 时淘汰链表头部（最久未访问）\n    }\n}\n```\n\n**注意**：这是**非线程安全**的，并发环境要加锁或用 `Collections.synchronizedMap` 包装。生产环境做缓存建议直接用 Caffeine。"
+    },
+    {
+      "category": "java-concurrency",
+      "title": "线程的生命周期有哪几种状态？",
+      "difficulty": 1,
+      "hot": 1,
+      "tags": "线程状态,生命周期",
+      "answer": "Java 中 `Thread.State` 定义了 **6 种状态**：\n\n1. **NEW**：new 了但还没 `start()`。\n2. **RUNNABLE**：可运行（包含了操作系统层面的就绪与运行中，Java 不区分）。\n3. **BLOCKED**：等待获取 **synchronized 监视器锁**。\n4. **WAITING**：无限期等待，需要别的线程显式唤醒（`wait()`、`join()`、`park()`）。\n5. **TIMED_WAITING**：限时等待（`sleep(ms)`、`wait(ms)`、`join(ms)`）。\n6. **TERMINATED**：已结束。\n\n**易错点**：\n- `BLOCKED` 只针对 synchronized；用 `ReentrantLock` 等锁时的等待表现为 `WAITING`（源码里是 park）。\n- `sleep` 不释放锁，`wait` 释放锁——这是高频追问。"
+    },
+    {
+      "category": "java-concurrency",
+      "title": "创建线程有哪些方式？start() 和 run() 有什么区别？",
+      "difficulty": 1,
+      "hot": 0,
+      "tags": "线程创建,start,run,Callable",
+      "answer": "**四种方式**：\n1. 继承 `Thread` 重写 run（不推荐，占用了继承位）。\n2. 实现 `Runnable`（推荐，任务与线程解耦）。\n3. 实现 `Callable` + `FutureTask`（能拿返回值和异常）。\n4. **线程池**（生产环境唯一推荐）。\n\n**start() vs run()**：\n- `run()` 就是普通方法，**当前线程直接调用**，不会开新线程。\n- `start()` 才会走 `start0()` 这个 native 方法，让 JVM 创建新线程，由新线程回调 `run()`。\n- `start()` 在同一线程上**只能调用一次**，重复调用抛 `IllegalThreadStateException`。"
+    },
+    {
+      "category": "java-concurrency",
+      "title": "synchronized 的原理是什么？锁升级过程是怎样的？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "synchronized,Monitor,锁升级,偏向锁",
+      "answer": "**实现原理**：\n- 修饰代码块：编译成 `monitorenter` / `monitorexit` 字节码指令。\n- 修饰方法：方法访问标志加 `ACC_SYNCHRONIZED`。\n- 底层依赖**对象头 Mark Word** 和 **Monitor（管程）**，重量级锁最终会阻塞线程并触发用户态/内核态切换。\n\n**锁升级（只能升不能降）**：\n1. **无锁**\n2. **偏向锁**：只有一个线程访问时，Mark Word 记录线程 ID，之后进入无需 CAS。（JDK 15 起默认禁用，JDK 18 已废弃——因为现代应用锁竞争普遍，偏向锁的撤销成本得不偿失）\n3. **轻量级锁**：有竞争但竞争轻微时，用 CAS 自旋尝试获取，避免阻塞。\n4. **重量级锁**：自旋失败或竞争激烈，升级为 Monitor 阻塞。\n\n**追问：锁能不能降级？** 不能自动降级，但偏向锁撤销后会回到无锁状态；GC 的 safepoint 也可能触发撤销。"
+    },
+    {
+      "category": "java-concurrency",
+      "title": "synchronized 和 ReentrantLock 的区别？怎么选？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "synchronized,ReentrantLock,AQS,可中断",
+      "answer": "| 维度 | synchronized | ReentrantLock |\n|---|---|---|\n| 层面 | JVM 关键字 | JDK API（AQS） |\n| 释放 | 自动（异常也会释放） | 必须手动 `unlock()`，建议放 finally |\n| 可中断 | 不可 | `lockInterruptibly()` 可 |\n| 超时尝试 | 不可 | `tryLock(timeout)` 可 |\n| 公平锁 | 不支持 | 支持（`new ReentrantLock(true)`） |\n| 条件变量 | 一个（wait/notify） | 多个 `Condition`，可精确唤醒 |\n\n**选型**：**优先用 synchronized**——JDK 6 之后有锁升级优化，性能差距已经很小，而且不会忘记释放锁。只有需要「可中断、可超时、公平锁、多条件队列」这些高级特性时才用 ReentrantLock（比如用它实现有界阻塞队列）。"
+    },
+    {
+      "category": "java-concurrency",
+      "title": "volatile 的作用和实现原理？能保证原子性吗？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "volatile,内存屏障,可见性,有序性",
+      "answer": "**两个语义**：\n1. **可见性**：写操作立即刷新到主内存，读操作直接从主内存读，其他线程马上能看到。\n2. **有序性**：禁止指令重排（通过插入内存屏障实现：写前 StoreStore、写后 StoreLoad；读后 LoadLoad、LoadStore）。\n\n**不保证原子性**！`i++` 是「读-改-写」三步，`volatile int i; i++` 并发下依然会丢更新。要原子性得用 `AtomicInteger` 或加锁。\n\n**典型用法**：双重检查锁（DCL）单例里给 instance 加 volatile——防止「分配内存 → 赋值引用 → 初始化对象」被重排成「赋值引用 → 初始化」，导致别的线程拿到**半成品对象**。\n\n**适用场景**：一写多读的状态标志位（如 `volatile boolean running`）。"
+    },
+    {
+      "category": "java-concurrency",
+      "title": "什么是 JMM？happens-before 规则有哪些？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "JMM,happens-before,内存模型",
+      "answer": "**JMM（Java 内存模型）**：屏蔽各硬件与操作系统的内存差异，定义**多线程读写共享变量时的可见性与有序性规则**。它规定了主内存与工作内存的抽象关系：线程不能直接操作主内存，必须先把变量拷到工作内存。\n\n**happens-before**：判断「前一个操作的结果对后一个操作是否可见」的核心规则。若 A happens-before B，则 A 的结果对 B 可见。主要规则：\n\n1. **程序顺序**：同一线程内，前面的操作 hb 后面的操作。\n2. **监视器锁**：解锁 hb 后续对同一锁的加锁。\n3. **volatile**：写 hb 后续的读。\n4. **线程启动**：`Thread.start()` hb 新线程中的任一操作。\n5. **线程终止**：线程中所有操作 hb 其他线程检测到它终止（`join()` 返回）。\n6. **传递性**：A hb B，B hb C ⇒ A hb C。\n\n**注意**：happens-before 不是时间上的先后，而是**可见性保证**。"
+    },
+    {
+      "category": "java-concurrency",
+      "title": "线程池的核心参数有哪些？任务提交后的执行流程？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "线程池,ThreadPoolExecutor,执行流程",
+      "answer": "**七大参数**：\n`corePoolSize`、`maximumPoolSize`、`keepAliveTime`、`unit`、`workQueue`、`threadFactory`、`handler`。\n\n**执行流程**（关键，务必按顺序答）：\n1. 线程数 < corePoolSize → **直接新建核心线程**执行。\n2. 线程数 ≥ core → 任务**入队列**排队。\n3. 队列**满**且线程数 < max → 新建**非核心线程**执行。\n4. 队列满且线程数 = max → 执行**拒绝策略**。\n\n**最大的坑**：用 `Executors.newFixedThreadPool` 会创建**无界队列** `LinkedBlockingQueue`，此时第 3 步永远不会触发——maximumPoolSize 形同虚设，任务全堆积在队列里，最终 OOM。`newCachedThreadPool` 则相反，队列容量为 0、最大线程数是 Integer.MAX_VALUE，可能创建海量线程。\n\n**结论**：**必须手动 new ThreadPoolExecutor**，指定有界队列和线程命名工厂。"
+    },
+    {
+      "category": "java-concurrency",
+      "title": "线程池的拒绝策略有哪几种？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "拒绝策略,RejectedExecutionHandler",
+      "answer": "`ThreadPoolExecutor` 内置 **4 种**（都实现 `RejectedExecutionHandler`）：\n\n1. **AbortPolicy（默认）**：直接抛 `RejectedExecutionException`，调用方必须处理。\n2. **CallerRunsPolicy**：**由提交任务的线程自己执行**。会阻塞调用方，天然形成背压，但可能拖慢主线程（Web 场景下会拖慢 Tomcat 工作线程）。\n3. **DiscardPolicy**：静默丢弃，**不抛异常也不记录**——最危险，问题会被藏起来。\n4. **DiscardOldestPolicy**：丢掉队列里最老的任务，再重试提交。\n\n**实践**：核心业务用 AbortPolicy + 上游限流/降级；允许丢的日志、埋点类任务可用 DiscardOldestPolicy，但**必须打日志**。也可以自定义：把任务落盘或投递到 MQ 稍后补偿。\n\n**追问：线程池满了怎么监控？** 覆写 `beforeExecute`/`afterExecute`，或用 `getActiveCount()`、`getQueue().size()` 暴露到 Micrometer/Prometheus。"
+    },
+    {
+      "category": "java-concurrency",
+      "title": "线程池大小应该怎么设置？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "线程池,参数调优,CPU密集,IO密集",
+      "answer": "**经典公式**：\n- **CPU 密集型**：`N + 1`（N = CPU 核数），多了只会增加上下文切换开销。\n- **IO 密集型**：`2N` 或 `N × (1 + 平均等待时间 / 平均计算时间)`。IO 等待不占 CPU，多开线程能提高吞吐。\n\n**但别死记公式**，真实做法：\n1. **先压测**：拿 JMeter/wrk 跑，观察 QPS、P99 延迟、CPU 使用率。\n2. **看瓶颈在哪**：CPU 打满说明线程多了；CPU 低而队列积压说明线程少了。\n3. **隔离线程池**：不要让所有业务共用一个池——核心接口和后台任务混在一起，一个慢任务会把整个池拖垮。按业务维度拆池，各自设参数。\n\n**经验值**：8 核机器上，CPU 密集 8~10，IO 密集 20~50，最终以压测数据为准。"
+    },
+    {
+      "category": "java-concurrency",
+      "title": "AQS 的原理是什么？ReentrantLock 是怎么基于它实现的？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "AQS,state,CLH队列,CAS",
+      "answer": "**AQS（AbstractQueuedSynchronizer）** 是 JUC 的基石，`ReentrantLock`、`Semaphore`、`CountDownLatch`、`ReentrantReadWriteLock` 都建立在它之上。\n\n**三个核心组成**：\n1. **volatile int state**：同步状态。ReentrantLock 用它表示**重入次数**（0 表示未占用），CountDownLatch 表示剩余计数，Semaphore 表示可用许可数。\n2. **FIFO 双向队列（CLH 变体）**：抢锁失败的线程包装成 Node 入队并 `LockSupport.park()` 挂起。\n3. **CAS 修改 state**：`compareAndSetState` 保证抢锁的原子性。\n\n**加锁流程**：CAS 把 state 从 0 改成 1 → 成功即持有；失败则判断是不是自己重入（`exclusiveOwnerThread == current`，是则 state+1）；否则入队 park。\n\n**解锁流程**：state-1，减到 0 时释放，唤醒队列中第一个有效节点（后继节点的 waitStatus 置为 -1 SIGNAL，因此是从后往前找）。\n\n**模板方法模式**：AQS 定义了排队、阻塞、唤醒的骨架，子类只需实现 `tryAcquire` / `tryRelease` 等。\n\n**公平 vs 非公平**：非公平锁直接用 CAS 抢，抢到就执行，**允许插队**（吞吐更高）；公平锁先 `hasQueuedPredecessors()` 检查队列里有没有人排队。"
+    },
+    {
+      "category": "java-concurrency",
+      "title": "CAS 是什么？ABA 问题怎么解决？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "CAS,ABA,AtomicStampedReference,Unsafe",
+      "answer": "**CAS（Compare And Swap）**：比较内存值与预期值，相等则更新为新值，整个操作由 CPU 的 `cmpxchg` 指令保证原子性。三个操作数：内存地址 V、预期值 A、新值 B。\n\n**底层**：`Unsafe` 的本地方法 → `cmpxchg`，多核下会加 `lock` 前缀保证可见性与原子性。\n\n**三大问题**：\n1. **ABA 问题**：值从 A→B→A，CAS 检测不出来。\n   - 解决：`AtomicStampedReference`（版本号）或 `AtomicMarkableReference`（布尔标记）。\n   - 但**大部分场景不需要解决**——比如数值累加，中间过程不影响结果；只有依赖「过程状态」的场景（如无锁栈/队列）才必须解决。\n2. **自旋开销大**：竞争激烈时大量线程空转烧 CPU。解决：`LongAdder` 分段累加，或改用锁。\n3. **只能保证单个变量原子性**：多变量需要 `AtomicReference` 打包成一个对象，或加锁。"
+    },
+    {
+      "category": "java-concurrency",
+      "title": "ThreadLocal 的原理是什么？为什么会内存泄漏？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "ThreadLocal,内存泄漏,弱引用,remove",
+      "answer": "**原理**：每个 `Thread` 内部有一个 `ThreadLocalMap` 字段，**key 是 ThreadLocal 对象本身（弱引用），value 是你要存的值（强引用）**。所以数据实际存在线程自己身上，天然隔离。注意是**每个线程一份副本**，不是共享一份。\n\n**内存泄漏成因**：\n- Entry 的 key 是 `WeakReference<ThreadLocal>`，value 是强引用。\n- 当外部的 ThreadLocal 引用被置 null，GC 会回收 key，但 **value 仍被 Entry 强引用**。\n- 如果线程是**线程池里长期存活**的，这个 Entry 就一直挂着，value 永远无法回收 → 泄漏。\n\n**正确用法**（必须背下来）：\n```java\nprivate static final ThreadLocal<X> TL = new ThreadLocal<>();\n// 用完\nTL.remove();   // 必须放在 finally 里\n```\n\n**追问**：为什么 key 用弱引用？—— 这是 JDK 的一种**兜底**：即使开发者忘了 remove，至少 key 能被回收。value 的清理则依赖 `get`/`set`/`remove` 时顺带触发的 `expungeStaleEntry` 探测式清理。"
+    },
+    {
+      "category": "java-concurrency",
+      "title": "死锁产生的条件是什么？线上怎么排查？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "死锁,jstack,排查",
+      "answer": "**四个必要条件**（破坏任一即可避免）：\n1. **互斥**：资源同一时刻只能被一个线程占用。\n2. **持有并等待**：持有资源的同时等待其他资源。\n3. **不可剥夺**：资源不能被强行抢走。\n4. **循环等待**：形成环状等待链。\n\n**预防手段**：统一按**固定顺序**加锁（破坏循环等待，最常用）；用 `tryLock(timeout)` 超时放弃（破坏持有并等待）；减少锁粒度、避免嵌套锁。\n\n**线上排查**：\n```bash\njps -l                  # 找到 Java 进程 pid\njstack <pid> > dump.txt # 导出线程栈\n# 搜索 \"Found one Java-level deadlock\"\n```\n输出会明确列出**哪个线程持有哪把锁、在等哪把锁**。也可以用 `jconsole` / Arthas 的 `thread -b`（直接显示阻塞其他线程的线程）。\n\n**代码示例**：线程 A 拿 lock1 等 lock2，线程 B 拿 lock2 等 lock1。"  },
+    {
+      "category": "java-concurrency",
+      "title": "CountDownLatch、CyclicBarrier、Semaphore 的区别？",
+      "difficulty": 2,
+      "hot": 0,
+      "tags": "CountDownLatch,CyclicBarrier,Semaphore,JUC",
+      "answer": "| 工具 | 作用 | 能否复用 | 谁在等 |\n|---|---|---|---|\n| **CountDownLatch** | 一个/多个线程等**若干任务做完** | **不可复用**（计数到 0 就废了） | 等待者等，计数者 countDown |\n| **CyclicBarrier** | 一组线程**互相等齐**再一起走 | **可复用**（cyclic） | 所有参与者互相等 |\n| **Semaphore** | 控制**同时访问的线程数** | 可 | 无「等齐」概念，抢许可 |\n\n**典型场景**：\n- CountDownLatch：主线程等 5 个初始化任务完成再启动服务；接口并行调 3 个下游后聚合结果。\n- CyclicBarrier：多线程分片计算，每轮结束同步一次再进入下一轮；游戏房间满员开局。\n- Semaphore：限流——限制同时访问某资源的线程数（如数据库连接、外部 API 调用）。\n\n**CountDownLatch 有 countDown 和 await 两个动作，CyclicBarrier 只有一个 await** —— 这是最直观的区分。"
+    },
+    {
+      "category": "java-jvm",
+      "title": "JVM 的运行时内存区域是怎么划分的？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "内存区域,堆,栈,方法区",
+      "answer": "**线程私有（随线程创建销毁）**：\n1. **程序计数器 PC**：当前线程执行的字节码行号，唯一不会 OOM 的区域。\n2. **虚拟机栈**：方法调用的栈帧（局部变量表、操作数栈、动态链接、返回地址）。栈深度超限 → `StackOverflowError`，扩展失败 → OOM。\n3. **本地方法栈**：为 native 方法服务。\n\n**线程共享**：\n4. **堆**：对象实例与数组，GC 主战场。分**新生代（Eden + 2 个 Survivor）**和**老年代**。\n5. **方法区**：类元信息、常量、静态变量。**JDK 8 起由永久代改为元空间（Metaspace），移到本地内存**，不再受 `-Xmx` 限制（用 `-XX:MaxMetaspaceSize` 控制）。\n\n**易错点**：\n- 字符串常量池在 JDK 7 就已经从方法区移到了**堆**里。\n- 直接内存（DirectByteBuffer）不属于运行时数据区，但受 `-XX:MaxDirectMemorySize` 约束，满了也会 OOM。"
+    },
+    {
+      "category": "java-jvm",
+      "title": "对象的创建过程是怎样的？内存分配有哪些策略？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "对象创建,TALB,指针碰撞,逃逸分析",
+      "answer": "**创建流程**：\n1. **类加载检查**：常量池能否定位到类符号引用，类是否已加载。\n2. **分配内存**：\n   - 堆规整（有压缩整理）→ **指针碰撞**：移动分界指针。\n   - 堆不规整 → **空闲列表**：从列表找合适块。\n   - 并发安全：CAS 重试，或 **TLAB（本地线程分配缓冲）**——每个线程在 Eden 预分一块私有区域，TLAB 用完后才需要同步。\n3. **零值初始化**：保证实例字段有默认值（`int` 为 0），所以「对象还没构造完就能读到字段」。\n4. **设置对象头**：Mark Word（哈希码、GC 分代年龄、锁状态）+ 类型指针。\n5. **执行 `<init>`**：构造方法、代码块、字段赋值。\n\n**热点优化**：逃逸分析判定对象不会逃出方法后，可以做**栈上分配**或**标量替换**，直接在栈上拆散成基本类型，避免堆分配与 GC。"
+    },
+    {
+      "category": "java-jvm",
+      "title": "如何判断一个对象可以被回收？",
+      "difficulty": 1,
+      "hot": 1,
+      "tags": "可达性分析,引用计数,GC Roots",
+      "answer": "**引用计数法**：每个对象维护被引用次数，为 0 可回收。**Java 不用它**，因为无法解决**循环引用**（A 引用 B，B 引用 A，两个都不可达但计数不为 0）。\n\n**可达性分析（Java 采用）**：从 **GC Roots** 出发遍历引用链，不可达的对象才可回收。\n\n**GC Roots 包括**：\n- 虚拟机栈中局部变量引用的对象\n- 方法区静态属性引用的对象\n- 方法区常量引用的对象\n- 本地方法栈 JNI 引用的对象\n- 同步锁 Monitor 持有的对象、JVM 内部引用（基本类型 Class、常驻异常对象、系统类加载器）\n\n**补充**：不可达也不一定立刻回收——如果重写了 `finalize()` 且未被调用过，会被放进 F-Queue 给一次「自救」机会（但 `finalize` 已废弃，不要依赖）。"
+    },
+    {
+      "category": "java-jvm",
+      "title": "常见的垃圾回收算法有哪几种？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "GC算法,标记清除,复制,标记整理,分代收集",
+      "answer": "**1. 标记-清除（Mark-Sweep）**\n标记可回收对象后直接清除。缺点：产生**内存碎片**，且标记和清除效率都不高。\n\n**2. 复制（Copying）**\n把存活对象复制到另一块空间，然后整块清空。优点：无碎片、分配快（指针碰撞）。缺点：**浪费一半空间**。适合**对象存活率低**的新生代。\n\n**3. 标记-整理（Mark-Compact）**\n标记后把存活对象向一端移动，再清理边界外内存。优点：无碎片。缺点：移动对象要**更新引用**，停顿更长。适合**对象存活率高**的老年代。\n\n**4. 分代收集（Generational）**\n不是独立算法，而是**策略**：按对象存活周期分区，新生代用复制、老年代用标记清除或标记整理，各自选最合适的收集器。这是现代 JVM 的核心思想。\n\n**补充：三色标记法**是现代并发收集器（CMS、G1）的基础，用白/灰/黑三色标识扫描进度，配合**增量更新（CMS）**或**原始快照 SATB（G1）**解决并发标记时漏标的问题。"
+    },
+    {
+      "category": "java-jvm",
+      "title": "CMS、G1、ZGC 有什么区别？怎么选？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "CMS,G1,ZGC,收集器",
+      "answer": "**CMS（JDK 9 废弃，JDK 14 移除）**\n- 面向老年代，**标记-清除**，追求**最短停顿**。\n- 四阶段：初始标记（STW）→ 并发标记 → 重新标记（STW）→ 并发清除。\n- 缺点：**内存碎片**（碎片过多退化为 Serial Old 单线程 Full GC）、**浮动垃圾**、并发阶段占用 CPU。\n\n**G1（JDK 9 起默认）**\n- 把堆切成大小相等的 **Region**，逻辑上仍分代，物理上不连续。\n- 可**预测停顿**：`-XX:MaxGCPauseMillis`，按「回收收益」排序优先回收垃圾最多的 Region（Garbage First 的由来）。\n- **整体是标记-整理（Region 间复制），局部是复制算法**，无碎片。\n- 适合**大堆（6GB 以上）**、要求可控停顿的服务。\n\n**ZGC（JDK 15 转正）**\n- 目标停顿 **< 1ms**，且**与堆大小无关**（堆 8MB 到 16TB 停顿基本恒定）。\n- 核心技术：**染色指针**（把标记信息存在指针里）+ **读屏障** + **并发整理**。\n- 代价：需要更多内存和 CPU（读屏障开销）。JDK 21 起有分代 ZGC。\n\n**选型**：小堆或低延迟要求一般 → G1（默认即可）；超大堆 + 极致低延迟（如内存型缓存服务）→ ZGC；老项目可能还在用 ParNew + CMS。"
+    },
+    {
+      "category": "java-jvm",
+      "title": "对象什么时候会进入老年代？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "晋升,老年代,动态年龄判定",
+      "answer": "**四种进入老年代的情况**：\n\n1. **年龄达到阈值**：Survivor 区中对象每熬过一次 Minor GC，年龄 +1，达到 `-XX:MaxTenuringThreshold`（默认 **15**）后晋升。\n2. **动态年龄判定**：Survivor 中**相同年龄的对象大小总和 > Survivor 空间的一半**时，年龄 ≥ 该年龄的对象直接晋升，**不必等到 15 岁**。这是最容易被忽略的一条。\n3. **大对象直接进老年代**：超过 `-XX:PretenureSizeThreshold` 的对象（如很长的数组）直接分配在老年代，避免在 Eden 和 Survivor 之间反复复制。\n4. **空间分配担保失败**：Minor GC 前检查老年代最大可用连续空间能否容纳新生代所有对象，担保失败则触发 Full GC。\n\n**相关参数**：`-XX:SurvivorRatio`（Eden 与单个 Survivor 的比例，默认 8:1:1）。"
+    },
+    {
+      "category": "java-jvm",
+      "title": "类加载的过程分为哪几步？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "类加载,加载,连接,初始化",
+      "answer": "**五个阶段（加载-连接-初始化，连接又分三小步）**：\n\n1. **加载**：通过全限定名获取二进制字节流，生成 Class 对象。\n2. **验证**：文件格式、元数据、字节码、符号引用验证，防止恶意字节码。\n3. **准备**：为**静态变量分配内存并设零值**（`static int a = 10` 此时 a 是 0，不是 10）。\n   > 例外：`static final` 常量在准备阶段就赋成真实值。\n4. **解析**：把常量池的符号引用替换为直接引用。\n5. **初始化**：执行 **`<clinit>()`**，即静态变量赋值 + 静态代码块，按源码顺序执行。**这是真正执行 Java 代码的阶段**。\n\n**触发初始化的时机**（主动引用）：new、访问静态字段/方法、反射、初始化子类会先初始化父类、作为启动类（main 所在类）。\n\n**被动引用不触发**：通过子类访问父类静态字段、数组定义 `new A[10]`、引用编译期常量。"
+    },
+    {
+      "category": "java-jvm",
+      "title": "什么是双亲委派模型？为什么要打破它？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "双亲委派,类加载器,SPI,Tomcat",
+      "answer": "**三层类加载器**：Bootstrap ClassLoader（C++ 实现，加载 `java.*`）→ Extension/Platform ClassLoader → Application ClassLoader（加载 classpath）。\n\n**工作流程**：收到加载请求先委派给父加载器，父加载器再往上委派，直到 Bootstrap；父加载器加载不了才由自己加载。\n\n**为什么这样设计**：\n1. **安全**：防止用户自定义 `java.lang.String` 冒充核心类。\n2. **避免重复加载**：同一个类在 JVM 中只被加载一次。\n\n**三次典型「打破」**：\n1. **JDK 1.2 之前**：没有委派机制，是历史遗留。\n2. **SPI 场景**（JDBC、JNDI）：核心类 `DriverManager` 在 Bootstrap 层，但它要加载厂商实现类（在 classpath），父加载器看不到子加载器的类 → 用**线程上下文类加载器** `Thread.currentThread().getContextClassLoader()` 反向委派。\n3. **热部署 / 模块化**（OSGi、Tomcat）：Tomcat 每个 Web 应用一个 WebAppClassLoader，**优先自己加载**（先子后父），实现应用间隔离。\n\n**自定义类加载器的用途**：热修复（如阿里的 AndFix/Tinker）、字节码加密防反编译、从网络/数据库加载类。"
+    },
+    {
+      "category": "java-jvm",
+      "title": "常见的 OOM 有哪些类型？怎么排查？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "OOM,内存溢出,排查,MAT",
+      "answer": "**常见类型**（异常信息会直接指出是哪个区域）：\n\n1. `Java heap space`：堆内存不足。多为**内存泄漏**（对象被无意持有）或**一次性加载过多数据**（`select *` 无分页、导出大 Excel）。\n2. `GC overhead limit exceeded`：GC 花了 98% 以上时间却只回收了不到 2% 的堆，属于堆不足的另一种表现。\n3. `Metaspace`：动态生成类过多（大量 CGLIB 代理、反射、Groovy 脚本），检查 `-XX:MaxMetaspaceSize`。\n4. `unable to create new native thread`：线程数超过系统限制，通常是**线程池没复用、反复 new Thread**。\n5. `Direct buffer memory`：NIO 直接内存耗尽，`-XX:MaxDirectMemorySize` 调大或检查是否漏了 `clean()`。\n\n**排查步骤**：\n```bash\n# 1. 事前加参数，OOM 时自动 dump\n-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/dump\n# 2. 用 MAT 或 JProfiler 打开 hprof\n# 3. 看 Dominator Tree 找「占用最大的对象」和 GC Roots 引用链\n# 4. 配合 jstat -gcutil <pid> 1000 观察各分区增长趋势\n```\n\n**定位技巧**：MAT 的 **Leak Suspects** 报告会直接给出「谁持有了这些对象」，通常能一步定位到业务代码。"
+    },
+    {
+      "category": "java-jvm",
+      "title": "线上 CPU 使用率飙到 100%，怎么排查？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "CPU飙升,排查,arthas,top,jstack",
+      "answer": "**标准排查链路**（Linux）：\n```bash\n# 1. 找到进程\njps -l\n# 2. 找到占用最高的线程（-H 显示线程级）\ntop -Hp <pid>        # 记下高 CPU 的线程 tid（十进制）\n# 3. 转成十六进制\nprintf '%x\\n' <tid>\n# 4. 导出线程栈，按 nid 搜索\njstack <pid> | grep -A 30 \"nid=0x<hex>\"\n```\n**一步到位**：`jstack` 不好用时，直接用 **Arthas**：\n```bash\nthread -n 3      # 显示 CPU 占用最高的 3 个线程及其栈\nthread -b        # 找出阻塞其他线程的那个\n```\n\n**常见根因**：\n1. **死循环 / 无限递归**（栈顶是自己写的类）。\n2. **频繁 Full GC**：用 `jstat -gcutil <pid> 1000` 看，若 FGC 列快速上涨说明是 GC 在烧 CPU → 转去排查内存问题。\n3. **正则回溯**：复杂正则匹配长字符串会指数级回溯（经典案例 `(a+)+`），栈顶会停在 `Pattern$Loop`。\n4. **频繁序列化/加解密**、大量异常创建（`fillInStackTrace` 很贵）。\n5. **自旋锁 / CAS 空转**：栈顶停在 `Unsafe.park` 或 `AtomicXxx`。"
+    },
+    {
+      "category": "java-jvm",
+      "title": "常用的 JVM 调优参数有哪些？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "调优参数,Xms,Xmx,GC",
+      "answer": "**堆与栈**\n```\n-Xms4g -Xmx4g              # 初始堆 = 最大堆，避免动态扩容造成抖动\n-Xss512k                   # 单线程栈大小\n-XX:MetaspaceSize=256m -XX:MaxMetaspaceSize=256m\n```\n**新生代**\n```\n-Xmn1g                     # 新生代大小（G1 不建议显式设置）\n-XX:SurvivorRatio=8        # Eden : Survivor = 8 : 1 : 1\n-XX:MaxTenuringThreshold=15\n```\n**收集器**\n```\n-XX:+UseG1GC -XX:MaxGCPauseMillis=200   # G1，目标停顿 200ms\n-XX:+UseZGC                             # ZGC，超低延迟\n-XX:ParallelGCThreads=8                 # 并行 GC 线程数\n```\n**诊断必备**\n```\n-XX:+HeapDumpOnOutOfMemoryError\n-XX:HeapDumpPath=/data/dump\n-Xlog:gc*:file=/data/logs/gc.log:time,uptime:filecount=10,filesize=50M\n```\n**原则**：\n1. **不要盲目调参**，先定位瓶颈（CPU？内存？GC 停顿？）。\n2. **Xms = Xmx** 是几乎没有副作用的推荐配置。\n3. 老年代收集器优先选 **G1**，除非有明确理由。\n4. 调优的目标是**满足业务 SLA**（延迟/吞吐），不是把 GC 时间调到 0。"
+    },
+    {
+      "category": "java-jvm",
+      "title": "内存泄漏和内存溢出有什么区别？",
+      "difficulty": 1,
+      "hot": 0,
+      "tags": "内存泄漏,内存溢出",
+      "answer": "**内存泄漏（Memory Leak）**：对象**已经不再被业务需要，却因为被引用着无法回收**，导致可用内存持续减少。是一个**过程**。\n\n**内存溢出（OutOfMemoryError）**：申请内存时**没有足够空间**可用。是一个**结果**。\n\n**关系**：长期泄漏往往最终导致溢出，但溢出不一定由泄漏引起——也可能是**一次申请了过大对象**（如一次性查 100 万行数据）或**堆本身配置太小**。\n\n**Java 中泄漏的常见来源**：\n1. `ThreadLocal` 没 `remove`（线程池场景最典型）。\n2. 静态集合（`static Map`）只增不减，当缓存用。\n3. 监听器/回调注册了没反注册。\n4. 未关闭的资源（连接、流）——虽然不一定泄漏堆内存，但会耗尽连接池/文件句柄。\n5. 内部类持有外部类引用（非静态内部类 + 长生命周期）。\n\n**识别方法**：老年代占用持续上升，Full GC 后也降不下来，可用 `jstat -gcutil` 观察 OU 列。"
+    }
+  ]
+}

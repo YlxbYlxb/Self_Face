@@ -1,0 +1,308 @@
+{
+  "questions": [
+    {
+      "category": "spring",
+      "title": "什么是 IoC 和 DI？Spring 为什么要这么设计？",
+      "difficulty": 1,
+      "hot": 1,
+      "tags": "IoC,DI,控制反转,依赖注入",
+      "answer": "**IoC（控制反转）**：对象的创建权和依赖关系的管理权，从程序员手里**反转**给了容器。以前是 `new UserService()`，现在是容器帮你创建并注入。\n\n**DI（依赖注入）**：IoC 的具体实现方式，容器把依赖「注入」进来。三种方式：\n1. **构造器注入**（Spring 官方推荐）：依赖不可变、非空、便于测试、能发现循环依赖。\n2. **Setter 注入**：适合可选依赖。\n3. **字段注入**（`@Autowired` 直接标在字段上）：写法最简洁，但**不推荐**——无法用 final、脱离容器无法实例化、掩盖了「这个类依赖太多」的坏味道。\n\n**设计目的**：\n- **解耦**：业务类不再关心依赖怎么构造，只面向接口编程。\n- **可测试**：单元测试可以注入 mock。\n- **可替换**：换实现类只改配置，不改代码。\n- **统一管理生命周期**：AOP、事务、作用域都由容器统一处理。"
+    },
+    {
+      "category": "spring",
+      "title": "Spring Bean 的生命周期是怎样的？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "Bean生命周期,BeanPostProcessor",
+      "answer": "**核心流程（简化版，能背下来就够）**：\n\n1. **实例化**：反射调用构造器创建对象（此时只是个空壳）。\n2. **属性填充**：`populateBean`，注入依赖（`@Autowired`、`@Value`）。\n3. **Aware 接口回调**：`BeanNameAware` → `BeanFactoryAware` → `ApplicationContextAware`。\n4. **`BeanPostProcessor.postProcessBeforeInitialization()`**：AOP 代理在这一步前后生成。\n5. **初始化**：`@PostConstruct` → `InitializingBean.afterPropertiesSet()` → `init-method`。\n6. **`BeanPostProcessor.postProcessAfterInitialization()`**：**AOP 动态代理通常在这里创建**（返回的是代理对象）。\n7. **使用中**。\n8. **销毁**：容器关闭时 `@PreDestroy` → `DisposableBean.destroy()` → `destroy-method`。\n\n**最高频追问：BeanPostProcessor 有什么用？**\n- `AutowiredAnnotationBeanPostProcessor`：处理 `@Autowired` 注入。\n- `AnnotationAwareAspectJAutoProxyCreator`：为匹配切点的 Bean 生成代理，实现 AOP。\n- **注意**：`BeanPostProcessor` 本身会**优先实例化**（在所有普通 Bean 之前），所以它里面**不要注入普通 Bean**，否则可能拿到未初始化的对象。\n\n**追问：单例 Bean 什么时候创建？**默认在容器启动时（饿汉），加 `@Lazy` 变成首次访问时创建。"
+    },
+    {
+      "category": "spring",
+      "title": "Spring 如何解决循环依赖？三级缓存分别是什么？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "循环依赖,三级缓存,单例池",
+      "answer": "**什么是循环依赖**：A 依赖 B，B 依赖 A。\n\n**三级缓存**：\n| 缓存 | 内容 | 作用 |\n|---|---|---|\n| **一级** `singletonObjects` | 完整可用的 Bean | 最终成品 |\n| **二级** `earlySingletonObjects` | 提前暴露的**半成品** Bean（已实例化、未填充属性） | 避免重复创建代理 |\n| **三级** `singletonFactories` | `ObjectFactory`（工厂，调用才产出） | **延迟决定是否要生成代理对象** |\n\n**流程（A 依赖 B，B 依赖 A）**：\n1. 创建 A → 实例化后，把 A 的 ObjectFactory 放进**三级缓存**。\n2. 填充 A 的属性时发现要 B → 去创建 B。\n3. B 实例化后，填充属性时发现要 A → 从缓存里拿 A。\n   - 三级缓存有 A 的工厂 → 调 `getObject()` → **如果 A 需要被 AOP 代理，这里生成代理对象** → 放进二级缓存，删掉三级缓存。\n4. B 拿到 A 的引用（可能是代理）完成创建，放入一级缓存。\n5. A 继续填充属性拿到 B，完成创建，放入一级缓存。\n\n**为什么需要第三级缓存（核心考点）**：\n**二级缓存就能解决循环依赖**，第三级是为了**保证 AOP 代理的一致性**。\n- 如果只有二级缓存：A 在实例化后就暴露原始对象，等到初始化完才生成代理。那么「B 注入的是原始 A，容器里最终是代理 A」→ **同一个 Bean 有两个不同实例**，行为不一致。\n- 有了第三级的**工厂**：在别人来取的时候才调用 `getObject()`，此时可以**提前触发代理创建**，保证大家拿到的都是代理对象。\n\n**Spring 解决不了的情况**：\n1. **构造器注入的循环依赖**——实例化都完不成，无从「提前暴露」。所以官方推荐构造器注入，能在启动时就暴露出设计问题。\n2. **原型（prototype）作用域的循环依赖**。\n3. **`@Async` 方法导致的循环依赖**。\n\n**Spring Boot 2.6+ 默认禁止循环依赖**（`spring.main.allow-circular-references=false`），鼓励重构代码而不是依赖容器兜底。"
+    },
+    {
+      "category": "spring",
+      "title": "Spring AOP 的实现原理是什么？JDK 动态代理和 CGLIB 有什么区别？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "AOP,动态代理,CGLIB,JDK代理",
+      "answer": "**AOP 核心概念**：切面（Aspect）、切点（Pointcut，在哪切）、通知（Advice，切了做什么）、连接点（JoinPoint）、织入（Weaving）。\n\n**两种代理方式**：\n\n| 维度 | JDK 动态代理 | CGLIB |\n|---|---|---|\n| 原理 | 反射 + `InvocationHandler`，生成接口的匿名实现类 | **ASM 字节码**，生成目标类的**子类** |\n| 前提 | **目标类必须实现接口** | 目标类不能是 final，方法不能是 final/private |\n| 性能 | 创建快、调用慢（反射） | 创建慢（生成字节码）、调用快 |\n| 依赖 | JDK 自带 | 第三方库（Spring 已内嵌 repackage） |\n\n**Spring 的默认策略**：\n- 目标类实现了接口 → 默认用 **JDK 动态代理**。\n- 没实现接口 → 用 **CGLIB**。\n- **Spring Boot 2.x 起 `spring.aop.proxy-target-class=true` 是默认值，即强制用 CGLIB**——因为 CGLIB 代理的是类，注入时不用强制转接口，避免「注入接口类型却拿到代理失败」的坑。\n\n**经典踩坑**：\n1. **同类内部方法调用不走 AOP**（`this.method()` 绕过代理）→ 解决：注入自己（自注入）、`AopContext.currentProxy()`、或拆到另一个 Bean。\n2. **private / static / final 方法无法被增强**。\n3. **`@Transactional` 加在非 public 方法上无效**（Spring 5 之后 protected 也无效）。\n\n**AOP 的应用场景**：声明式事务、日志记录、权限校验、接口耗时统计、分布式锁、幂等控制、统一异常处理。\n\n**对比 AspectJ**：AspectJ 是**编译期/类加载期织入**（静态代理），性能更好、能增强 final 方法和字段访问；Spring AOP 是**运行期织入**，只支持方法级别的连接点。"
+    },
+    {
+      "category": "spring",
+      "title": "Bean 有哪些作用域？单例 Bean 线程安全吗？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "作用域,单例,线程安全",
+      "answer": "**六种作用域**（常用前两个）：\n- **singleton**（默认）：容器内只有一个实例，从启动到销毁。\n- **prototype**：每次 `getBean` 都创建新实例，**容器不负责销毁**（不会调用 destroy 方法）。\n- **request / session / application / websocket**：Web 环境下才有意义。\n\n**单例 Bean 线程安全吗？**\n\n**不一定，取决于有没有可变状态**：\n- **无状态 Bean 是线程安全的**（如大多数 Service、Controller、Mapper）——它们只有方法，没有实例变量参与「读-改-写」，天然安全。\n- **有可变成员变量就不安全**：\n  ```java\n  @Service\n  public class UserService {\n      private int count = 0;          // ← 危险！所有线程共享\n      public void add() { count++; }  // ← 并发下丢失更新\n  }\n  ```\n\n**解决方案**：\n1. **首选：设计成无状态**，需要状态就用局部变量或方法参数。\n2. 用 `ThreadLocal` 保存线程特有状态（**记得 remove**）。\n3. 用 `AtomicInteger` / `ConcurrentHashMap` 等线程安全容器。\n4. 加锁（代价高，最后考虑）。\n5. 实在要状态，改成 `prototype`（但注意注入到单例里仍会退化成单例，需要 `@Lookup` 或 `ObjectFactory`）。\n\n**面试加分**：主动说出「Spring 的 Controller 是单例的，所以千万不要在 Controller 里写成员变量存请求数据」——这是极常见的生产事故。"
+    },
+    {
+      "category": "spring",
+      "title": "@Transactional 在哪些情况下会失效？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "事务失效,Transactional,代理",
+      "answer": "**事务基于 AOP 代理，凡是绕过代理或代理不生效的情况都会失效**：\n\n1. **同类内部方法直接调用**：`this.methodB()` 不走代理，B 上的 `@Transactional` 无效。→ 注入自身、`AopContext.currentProxy()`、或拆到独立 Bean。\n\n2. **方法不是 public**：Spring 5 之后只支持 public 方法（早期版本的 `TransactionInterceptor` 用 `AopUtils.canApply` 判断，protected 也不生效）。\n\n3. **类没有被 Spring 管理**：自己 `new` 出来的对象，注解只是个摆设。\n\n4. **异常被吞掉**：\n   ```java\n   try { ... ; } catch (Exception e) { log.error(...); }  // 没往外抛 → 不会回滚\n   ```\n\n5. **抛出的异常类型不匹配**：`@Transactional` **默认只对 `RuntimeException` 和 `Error` 回滚**，受检异常（IOException）**不回滚**。→ 用 `@Transactional(rollbackFor = Exception.class)` 显式指定。\n\n6. **传播行为设置不当**：如 `Propagation.NOT_SUPPORTED`、`NEVER`，或以非事务方式运行。\n\n7. **多数据源未正确配置事务管理器**，或跨库操作（本地事务管不了）。\n\n8. **`@Async` / 新起线程**执行的部分不在同一事务里。\n\n9. **数据库引擎不支持事务**（MyISAM）。\n\n10. **`@Transactional` 加在接口上但用了 CGLIB 代理**（代理的是类，接口注解读不到）——**注解要加在实现类上**。\n\n**正确的写法**：\n```java\n@Transactional(rollbackFor = Exception.class, propagation = Propagation.REQUIRED)\npublic void doBusiness() { ... }\n```"
+    },
+    {
+      "category": "spring",
+      "title": "@Transactional 的传播行为有哪几种？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "传播行为,Propagation,事务",
+      "answer": "**7 种传播行为**，重点是前三个：\n\n| 传播行为 | 含义 | 场景 |\n|---|---|---|\n| **REQUIRED**（默认） | 有事务就加入，没有就新建 | 绝大多数业务方法 |\n| **REQUIRES_NEW** | **总是新建事务**，挂起当前事务。内层回滚**不影响外层** | 记日志（业务失败日志也要留）、扣积分（失败不影响主流程） |\n| **NESTED** | 嵌套事务，基于 **Savepoint**。内层回滚不影响外层，但外层回滚会带着内层一起回滚 | 部分失败可容忍的子流程 |\n| SUPPORTS | 有事务就用，没有就非事务执行 | 查询方法 |\n| NOT_SUPPORTED | 挂起当前事务，以非事务方式执行 | 大批量操作不想占事务 |\n| MANDATORY | 必须在事务中，否则抛异常 | 强制要求调用方开事务 |\n| NEVER | 必须不在事务中，否则抛异常 | 强制校验 |\n\n**REQUIRES_NEW 和 NESTED 的区别（高频追问）**：\n- `REQUIRES_NEW` 是**两个独立事务**，需要**两个数据库连接**（外层连接被挂起但不释放）。内层提交后，即使外层回滚，内层的修改**已经生效**。\n- `NESTED` 是**同一个事务内的保存点**，只有一个连接。外层回滚时内层也回滚。\n- **关键差异**：`NESTED` 内层无法独立提交持久化（除非外层提交）；`REQUIRES_NEW` 可以。\n\n**实战案例**：下单成功后给用户发优惠券，发券失败不该让订单回滚 → 发券方法用 `REQUIRES_NEW`。\n> ⚠️ **注意**：如果外层事务和 `REQUIRES_NEW` 的内层事务操作**同一行数据**，内层会等外层的行锁，形成**死锁**。这时应该把内层方法移到外层事务提交之后再执行（用事务同步回调或 MQ）。"
+    },
+    {
+      "category": "spring",
+      "title": "SpringBoot 自动配置的原理是什么？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "自动配置,SPI,Conditional,EnableAutoConfiguration",
+      "answer": "**核心是 `@SpringBootApplication`**，它由三个注解组成：\n- `@SpringBootConfiguration`（本质是 `@Configuration`）\n- `@ComponentScan`（扫描启动类所在包及子包）\n- **`@EnableAutoConfiguration`** ← 自动配置的关键\n\n**自动配置流程**：\n1. `@EnableAutoConfiguration` 通过 `@Import(AutoConfigurationImportSelector.class)` 导入选择器。\n2. 选择器读取 **`META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`** 文件（这是 **Spring Boot 2.7+ 的新方式**，2.7 之前读 `spring.factories` 的 `EnableAutoConfiguration` 键），拿到几百个自动配置类的全限定名。\n3. 经过 `AutoConfigurationImportSelector` 的**过滤**（去重、排除 `@EnableAutoConfiguration` 的 exclude 属性）。\n4. 逐个判断**条件注解**，满足才生效：\n   - `@ConditionalOnClass`：classpath 里有某个类才配置。\n   - `@ConditionalOnMissingBean`：容器里没有这个 Bean 才创建（**允许用户覆盖**）。\n   - `@ConditionalOnProperty`：配置项满足条件才生效。\n   - `@ConditionalOnWebApplication` 等。\n5. 生效的配置类里通过 `@Bean` 注册组件，配合 **`@EnableConfigurationProperties`** 把 `application.yml` 里的配置绑定到 `XxxProperties` 对象。\n\n**举个实例**：`DataSourceAutoConfiguration` 上有 `@ConditionalOnClass({DataSource.class, EmbeddedDatabaseType.class})`——只有引入了数据库驱动且没自己定义 DataSource 时才自动配置连接池。\n\n**怎么自定义一个 starter**：\n1. 写自动配置类 + `XxxProperties`。\n2. 在 `src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` 里写上配置类全限定名。\n3. 打包给业务方引入即可。\n\n**调试技巧**：启动时加 `--debug` 参数，会打印**自动配置报告**（Positive matches / Negative matches），能直接看到「哪个配置生效了、哪个因为什么没生效」。"
+    },
+    {
+      "category": "spring",
+      "title": "SpringMVC 的请求处理流程是怎样的？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "SpringMVC,DispatcherServlet,执行流程",
+      "answer": "**核心是 DispatcherServlet（前端控制器）**：\n\n1. 请求到达 **DispatcherServlet**（所有请求的统一入口）。\n2. 从 **HandlerMapping** 中找到能处理该 URL 的 **Handler（Controller 方法）**，返回一个 `HandlerExecutionChain`（含拦截器链）。\n3. 找到对应的 **HandlerAdapter**。\n4. 依次执行 **拦截器的 `preHandle`**（返回 false 则中断）。\n5. HandlerAdapter 调用实际的 Controller 方法，**处理参数绑定**（`@RequestBody` 走 `HttpMessageConverter` 做 JSON 反序列化）、执行**参数校验**（`@Valid`）。\n6. 返回值处理：\n   - `@ResponseBody` / `@RestController` → 用 `HttpMessageConverter` 序列化成 JSON 直接写回响应。\n   - 返回字符串/`ModelAndView` → 交给 **ViewResolver** 解析成 View 并渲染。\n7. 执行**拦截器的 `postHandle`**（**注意：这一步在异常时不会执行**）。\n8. 执行 **`afterCompletion`**（无论是否异常都会执行）。\n9. 若过程中抛异常 → 交给 **HandlerExceptionResolver**（对应 `@ExceptionHandler` / `@ControllerAdvice`）。\n\n**常见追问**：\n- **拦截器和过滤器的区别**：Filter 是 Servlet 规范，在 DispatcherServlet **之前**；Interceptor 是 Spring MVC 的，在 DispatcherServlet **之后、Controller 之前**。Interceptor 能拿到 HandlerMethod，Filter 不能。\n- **三个方法执行顺序**：`preHandle`（正序）→ Controller → `postHandle`（**倒序**）→ `afterCompletion`（**倒序**）。"
+    },
+    {
+      "category": "spring",
+      "title": "MyBatis 中 #{} 和 ${} 有什么区别？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "MyBatis,#{},${},SQL注入",
+      "answer": "| | `#{}` | `${}` |\n|---|---|---|\n| 处理方式 | **预编译占位符**，替换为 `?` | **字符串直接拼接** |\n| SQL 注入 | **安全** | **有注入风险** |\n| 类型处理 | 自动加引号、类型转换 | 原样插入 |\n| 性能 | 相同 SQL 可复用 PreparedStatement 缓存 | 每次都是新 SQL |\n\n**示例**：\n```sql\n-- mapper: WHERE name = #{name}\n-- 执行: WHERE name = ?   参数由 JDBC 安全填充\n\n-- mapper: ORDER BY ${column}\n-- 执行: ORDER BY create_time   ← 直接拼进 SQL\n```\n\n**什么时候必须用 `${}`**：\n1. **动态表名**：`SELECT * FROM ${tableName}`\n2. **动态排序字段**：`ORDER BY ${sortField} ${sortOrder}`,以及 `GROUP BY` 的列名\n3. 动态列名\n\n**因为 `#{}` 会被编译成 `?`，而表名和列名不能被参数化**，所以这些位置只能用 `${}`。\n\n**安全做法（必答）**：用 `${}` 时**一定要做白名单校验**：\n```java\nprivate static final Set<String> ALLOWED = Set.of(\"create_time\", \"id\", \"score\");\nif (!ALLOWED.contains(sortField)) {\n    throw new IllegalArgumentException(\"非法的排序字段\");\n}\n```\n绝对不能把前端传来的字符串直接拼进去。\n\n**追问：`like` 怎么写？** 用 `CONCAT('%', #{keyword}, '%')`，**不要用** `'%${keyword}%'`（会注入）。"
+    },
+    {
+      "category": "spring",
+      "title": "SpringBoot 的启动流程是怎样的？",
+      "difficulty": 3,
+      "hot": 0,
+      "tags": "启动流程,SpringApplication",
+      "answer": "**简化版六步**：\n\n1. **构造 SpringApplication**：推断应用类型（Servlet / Reactive / None），从 `spring.factories`（2.7+ 为 `AutoConfiguration.imports`）加载 `ApplicationContextInitializer` 和 `ApplicationListener`。\n2. **`run()` 方法**：启动计时器、创建 `BootstrapContext`、配置无头模式（`java.awt.headless`）。\n3. **准备环境**：`prepareEnvironment`——加载命令行参数、系统属性、`application.yml`，创建 `Environment` 并**广播 `ApplicationEnvironmentPreparedEvent`**。\n4. **创建容器**：`createApplicationContext`（Web 环境是 `ServletWebServerApplicationContext`）。\n5. **`refreshContext`（最核心的一步）**，即 `AbstractApplicationContext.refresh()`：\n   - `invokeBeanFactoryPostProcessors`：**这里完成自动配置类的解析与注册**（`ConfigurationClassPostProcessor` 解析 `@Configuration`、`@ComponentScan`、`@Import`）。\n   - `registerBeanPostProcessors`：注册 Bean 后置处理器。\n   - `onRefresh`：**内嵌 Tomcat 在这里启动并绑定端口**（`ServletWebServerApplicationContext` 重写了该方法）。\n   - `finishBeanFactoryInitialization`：**实例化所有非懒加载的单例 Bean**。\n   - `finishRefresh`：发布 `ContextRefreshedEvent`。\n6. **`afterRefresh` / 发布 `ApplicationReadyEvent`**，启动完成。\n\n**常见追问**：\n- **内嵌 Tomcat 什么时候启动？** `onRefresh()` 阶段，在单例 Bean 实例化**之前**。\n- **`CommandLineRunner` 和 `ApplicationRunner` 什么时候执行？** 容器 refresh 完成之后、`ApplicationReadyEvent` 之前，用来做初始化数据加载。\n- **端口占用异常什么时候抛？** `onRefresh` 阶段绑定时。"
+    },
+    {
+      "category": "network",
+      "title": "TCP 三次握手的过程是怎样的？为什么不是两次或四次？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "TCP,三次握手,SYN",
+      "answer": "**过程**：\n1. 客户端 → 服务端：`SYN=1, seq=x`（我想连接，我的初始序号是 x），进入 `SYN_SENT`。\n2. 服务端 → 客户端：`SYN=1, ACK=1, seq=y, ack=x+1`，进入 `SYN_RCVD`。\n3. 客户端 → 服务端：`ACK=1, seq=x+1, ack=y+1`，双方进入 `ESTABLISHED`。\n\n**为什么不是两次？**\n核心是**防止已失效的历史连接请求突然到达服务端，导致服务端建立无效连接、白白占用资源**。\n- 假设客户端发了一个 SYN 但网络阻塞了，客户端超时后重发并正常建立连接、传输数据、断开。此时那个「迟到的 SYN」才到达服务端。\n- 如果是两次握手，服务端收到就会**直接建立连接**并分配资源，而客户端根本不认这个连接（它已经没有待建连接的记录了）→ 服务端资源被长期占用。\n- 三次握手让服务端**必须等到客户端对第二个 SYN 的 ACK**，客户端拒认就不会发出这个 ACK。\n\n**为什么不是四次？**\n第二次握手时，服务端把 `SYN`（同步自己序号）和 `ACK`（确认对方序号）**合并**在一个报文里了。两项信息互不冲突，可以合并且无损语义，所以四次可以优化为三次。\n\n**顺带一个高频追问：初始序号 seq 为什么是随机的？**\n为了防止历史连接的数据包被误认为是本次连接的数据（序号撞车），同时增加安全性（防止序号被猜测后注入报文）。**ISN 与时间相关，每 4 微秒加一**。"
+    },
+    {
+      "category": "network",
+      "title": "TCP 四次挥手的过程？为什么 TIME_WAIT 要等 2MSL？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "TCP,四次挥手,TIME_WAIT,CLOSE_WAIT",
+      "answer": "**四次挥手**：\n1. 主动方 → 被动方：`FIN=1`（我没数据要发了），进入 `FIN_WAIT_1`。\n2. 被动方 → 主动方：`ACK`，进入 `CLOSE_WAIT`；主动方进入 `FIN_WAIT_2`。\n   > 此时**半关闭状态**：被动方还能继续发数据，主动方不能发。\n3. 被动方数据发完 → 主动方：`FIN=1`，进入 `LAST_ACK`。\n4. 主动方 → 被动方：`ACK`，进入 **`TIME_WAIT`**，等 **2MSL** 后关闭；被动方收到后关闭。\n\n**为什么挥手要四次（比握手多一次）？**\nTCP 是全双工的，**两个方向的关闭要分别进行**。被动方收到 FIN 后，可能还有数据没发完，所以 ACK 和 FIN **不能合并**——先确认「我知道你要关了」，等自己数据发完再发 FIN。\n\n**为什么 TIME_WAIT 要等 2MSL（报文最大生存时间 × 2）？**\n1. **保证最后一个 ACK 能到达对方**。如果这个 ACK 丢了，被动方会超时重发 FIN。若主动方已经关闭，收到 FIN 只能回 RST，被动方会异常终止。等待 2MSL（一来一回）足以覆盖「ACK 丢失 + FIN 重传」的完整周期。\n2. **让本次连接的残留报文在网络中彻底消失**，避免它们被后续同四元组（源 IP、源端口、目的 IP、目的端口）的新连接误收。\n\n**两种异常状态排查（工程重点）**：\n- **大量 TIME_WAIT**：主动关闭方才会出现，说明本机在频繁主动断连（短连接）。可通过连接池复用、`SO_REUSEADDR`、调小 `net.ipv4.tcp_fin_timeout` 缓解。\n- **大量 CLOSE_WAIT**：**这是代码 bug**！说明应用收到了对方的 FIN 但没有调用 `close()`。常见于**连接或流没有正确关闭**（没用 try-with-resources、异常路径漏了 finally）→ 最终耗尽文件句柄。看到 CLOSE_WAIT 就该去查代码。"
+    },
+    {
+      "category": "network",
+      "title": "TCP 和 UDP 有什么区别？各自适用什么场景？",
+      "difficulty": 1,
+      "hot": 1,
+      "tags": "TCP,UDP,对比",
+      "answer": "| 维度 | TCP | UDP |\n|---|---|---|\n| 连接 | 面向连接（三次握手） | 无连接 |\n| 可靠性 | **可靠**（确认、重传、排序、去重） | 不可靠，尽力而为 |\n| 传输形式 | 字节流 | **数据报**（保留消息边界） |\n| 头部开销 | 20~60 字节 | **8 字节** |\n| 流量/拥塞控制 | 有 | 无 |\n| 速度 | 较慢 | 快 |\n| 广播/组播 | 不支持 | 支持 |\n| 一对多 | 仅一对一 | 支持一对多 |\n\n**TCP 场景**：HTTP/HTTPS、FTP、SMTP、SSH——**要求数据完整有序**的场景。\n\n**UDP 场景**：\n- **音视频通话、直播**：丢几帧不影响体验，但延迟高就废了——不能等重传。\n- **DNS 查询**：一次一问一答，用 TCP 握手太浪费。\n- **游戏**：实时性优先。\n- **QUIC**（HTTP/3 底层）：在 UDP 上**自己实现**了一套可靠传输，避免了 TCP 的队头阻塞，还能 0-RTT 建连。\n\n**面试加分**：不要说「UDP 不可靠所以没用」——**UDP 把可靠性交给了应用层**，需要什么就实现什么，反而更灵活（QUIC 就是最好的例子）。"
+    },
+    {
+      "category": "network",
+      "title": "TCP 是如何保证可靠传输的？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "TCP,可靠传输,滑动窗口,重传",
+      "answer": "**六大机制**：\n\n1. **序号 + 确认（ACK）**：每个字节都有序号，接收方确认已收到的位置。\n2. **超时重传**：发出去没收到 ACK 就重发。超时时间 `RTO` 是**动态计算**的（基于 RTT 的加权平均和偏差，RTO = SRTT + 4×RTTVAR）。\n3. **快速重传**：收到 **3 个重复 ACK** 就立即重传，不必等超时。\n4. **滑动窗口（流量控制）**：接收方通过窗口字段告诉发送方「我还能收多少」，防止发送太快把接收端缓冲区打爆。窗口为 0 时发送方停止发送并定期发**窗口探测**。\n5. **拥塞控制**：防止把网络压垮，包含四个算法：\n   - **慢启动**：cwnd 从 1 开始，每收到一个 ACK **翻倍**（指数增长）。\n   - **拥塞避免**：cwnd 达到 `ssthresh` 后改为**每个 RTT 加 1**（线性增长）。\n   - **快速重传 / 快速恢复**：收到 3 个重复 ACK 时，`ssthresh = cwnd/2`，cwnd 减半后进入快速恢复（不回到慢启动）。\n   - **超时重传**：直接把 cwnd 重置为 1，重新慢启动（最严重的惩罚）。\n6. **校验和**：头部和数据都参与校验，出错则丢弃等待重传。\n\n**注意区分**：\n- **流量控制**针对**接收方**（怕接收方处理不过来）——用滑动窗口。\n- **拥塞控制**针对**网络**（怕网络拥堵）——用 cwnd。实际发送窗口 = `min(接收窗口, 拥塞窗口)`。\n\n**追问：为什么现在的 TCP 很少用「丢包即拥塞」判断？** 因为现代网络丢包多由链路误码引起，BBR 等新算法改用「带宽与时延」建模，不再把丢包等同于拥塞。"
+    },
+    {
+      "category": "network",
+      "title": "HTTP/1.0、HTTP/1.1、HTTP/2、HTTP/3 有什么区别？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "HTTP版本,HTTP2,HTTP3,QUIC",
+      "answer": "**HTTP/1.0**\n- 默认**短连接**，每个请求都要新建 TCP 连接（三次握手开销大）。\n\n**HTTP/1.1**（当前最广泛）\n- **长连接**（`Connection: keep-alive`），连接可复用。\n- **管道化**（pipelining）：可以连续发多个请求，但**响应必须按顺序返回** → **队头阻塞（HOL Blocking）**，实际上浏览器默认关闭。\n- 引入 `Host` 头（支持虚拟主机）、`Range` 断点续传、缓存控制（`Cache-Control`、`ETag`）。\n- 并发靠**多开 TCP 连接**（浏览器通常 6 个/域名），但连接本身有开销。\n\n**HTTP/2**（基于 TCP）\n- **二进制分帧**：把报文拆成帧，不再依赖文本解析。\n- **多路复用**：一个 TCP 连接上并行交错传输多个流，**解决了应用层的队头阻塞**。\n- **头部压缩（HPACK）**：静态表 + 动态表，重复的 header 只传索引。\n- **服务端推送**（Server Push，实践中效果不佳，Chrome 已移除）。\n- **遗留问题**：**TCP 层仍有队头阻塞**——一个包丢了，后面所有流都要等重传。\n\n**HTTP/3**（基于 **QUIC / UDP**）\n- 把可靠传输**挪到用户态用 UDP 实现**，每个流独立控制重传 → **彻底解决 TCP 层队头阻塞**。\n- **0-RTT / 1-RTT 建连**：TLS 1.3 集成在 QUIC 里，首次 1-RTT，重连可 0-RTT。\n- 连接迁移：用 Connection ID 标识连接，**切换网络（WiFi → 4G）不断连**。\n- 代价：UDP 在部分企业网络被封、CPU 消耗更高（用户态协议栈）。\n\n**一句话串起来**：HTTP/1.1 靠多连接并发 → HTTP/2 靠多路复用解决应用层队头阻塞 → HTTP/3 换掉 TCP 解决传输层队头阻塞。"
+    },
+    {
+      "category": "network",
+      "title": "HTTPS 的握手过程是怎样的？为什么说它是安全的？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "HTTPS,TLS,非对称加密,数字证书",
+      "answer": "**HTTPS = HTTP + TLS**，解决 HTTP 的三大问题：明文传输（窃听）、无身份验证（冒充）、无完整性校验（篡改）。\n\n**TLS 1.2 握手（RSA 密钥交换）**：\n1. **Client Hello**：客户端发支持的 TLS 版本、**密码套件列表**、随机数 Random1。\n2. **Server Hello**：服务端选定套件，返回随机数 Random2，并发送**数字证书**（含公钥、域名、签发机构、有效期）。\n3. **客户端验证证书**：用**内置的 CA 根证书公钥**验证签名，逐级回溯到受信任的根 CA；校验域名是否匹配、是否过期、是否被吊销（CRL/OCSP）。\n4. **密钥交换**：客户端生成 **Pre-Master Secret**，用证书里的**公钥加密**后发给服务端。\n5. **双方各自用 Random1 + Random2 + Pre-Master 计算出对称密钥**（会话密钥）。\n6. **Change Cipher Spec**：通知后续用对称加密通信。\n7. **Finished**：发送之前所有握手消息的摘要，验证握手未被篡改。\n\n**TLS 1.3 的改进（当前主流）**：\n- 握手从 **2-RTT 降到 1-RTT**，会话恢复支持 **0-RTT**。\n- 废弃了不安全的 RSA 密钥交换，只用 **ECDHE**（前向安全：即使服务端私钥泄露，历史流量也无法解密）。\n- 精简密码套件，只保留 AEAD 类。\n\n**为什么是安全的 —— 混合加密体系（核心答案）**：\n- **非对称加密（RSA/ECDHE）用于握手**：安全地协商出会话密钥。它的缺点是慢（比对称慢几个数量级）。\n- **对称加密（AES/ChaCha20）用于数据传输**：快。\n- **数字证书解决信任问题**：防止中间人伪造公钥。\n- **MAC / AEAD 保证完整性**：防篡改。\n\n**追问：为什么不全用非对称加密？** 性能太差，且非对称加密有长度限制（RSA 2048 一次最多加密约 245 字节）。\n\n**追问：抓包能看到内容吗？** 用私钥配合 Wireshark 可以解 TLS 1.2 的 RSA 流量；但 **TLS 1.3 的 ECDHE 有前向安全，即使有私钥也解不开**（除非配置了 SSLKEYLOGFILE）。"
+    },
+    {
+      "category": "network",
+      "title": "在浏览器输入 URL 到页面展示，中间发生了什么？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "URL,DNS,渲染,经典问题",
+      "answer": "这是一道**串场题**，答得好能展示知识面。分五段：\n\n**1. URL 解析与缓存检查**\n- 判断输入的是搜索词还是 URL。\n- 检查**浏览器缓存**（强缓存 `Cache-Control: max-age` 直接命中就用，不发请求）。\n\n**2. DNS 解析（域名 → IP）**\n依次查：**浏览器 DNS 缓存 → 操作系统 hosts 与 DNS 缓存 → 本地 DNS 服务器（递归查询）→ 根域名服务器 → 顶级域 → 权威域名服务器**。\n> 优化手段：DNS 预解析（`<link rel=\"dns-prefetch\">`）、CDN 就近解析。\n\n**3. 建立连接**\n- 三次握手建立 TCP 连接（若 HTTPS，还要做 TLS 握手）。\n- 若命中 CDN，请求会被路由到最近的边缘节点。\n\n**4. 发送 HTTP 请求并接收响应**\n- 经过可能存在的代理、网关、负载均衡（Nginx / LVS）。\n- 服务端处理：路由 → 中间件 → 业务逻辑 → 数据库/缓存 → 返回响应。\n- 响应经过**浏览器缓存策略**（协商缓存 `304 Not Modified`）。\n\n**5. 浏览器渲染**\n- **解析 HTML → DOM 树**；**解析 CSS → CSSOM 树**。\n- 合成 **Render Tree**（不含 `display:none` 和 `<head>` 元素）。\n- **布局（Layout / Reflow）**：计算每个节点的位置和大小。\n- **绘制（Paint）**：生成分层位图。\n- **合成（Composite）**：GPU 合成图层，最终显示。\n- **JS 执行**：`<script>` 会**阻塞 DOM 解析**（所以放底部或加 `defer`/`async`）。\n\n**追问：怎么优化首屏速度？** 减少请求数（合并、内联）、CDN、Gzip/Brotli 压缩、HTTP/2、懒加载、`defer`/`async`、关键 CSS 内联、图片 WebP + 懒加载、SSR/预渲染。"
+    },
+    {
+      "category": "network",
+      "title": "常见的 HTTP 状态码有哪些？",
+      "difficulty": 1,
+      "hot": 0,
+      "tags": "状态码,HTTP",
+      "answer": "**五大类**：1xx 信息、2xx 成功、3xx 重定向、4xx 客户端错误、5xx 服务端错误。\n\n**必记的几个**：\n- **200 OK**：成功。\n- **201 Created**：资源创建成功（POST 新增）。\n- **204 No Content**：成功但无返回体（DELETE 常返回这个）。\n- **301 Moved Permanently**：**永久**重定向，浏览器会缓存，搜索引擎会转移权重（换域名用它）。\n- **302 Found**：**临时**重定向（登录跳转用它）。\n- **304 Not Modified**：走协商缓存，内容没变，不返回 body（**省带宽的关键**）。\n- **400 Bad Request**：参数格式错误。\n- **401 Unauthorized**：**未认证**（没登录或 token 无效）。\n- **403 Forbidden**：**已认证但无权限**。401 和 403 的区别是高频考点。\n- **404 Not Found**：资源不存在。\n- **405 Method Not Allowed**：方法不对（用 GET 调 POST 接口）。\n- **429 Too Many Requests**：被限流。\n- **500 Internal Server Error**：服务端代码异常。\n- **502 Bad Gateway**：**网关从上游收到无效响应**（后端挂了、Nginx 配错 upstream）。\n- **503 Service Unavailable**：服务暂时不可用（过载、维护）。\n- **504 Gateway Timeout**：**网关等上游超时**。\n\n**502 和 504 的区别（运维高频追问）**：\n- 502 是「连上了但对方回了个看不懂的东西」——通常是后端进程挂了。\n- 504 是「连上了但对方迟迟不回」——通常是后端处理太慢（慢 SQL、死锁）。"
+    },
+    {
+      "category": "network",
+      "title": "Cookie、Session、Token、JWT 有什么区别？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "Cookie,Session,Token,JWT",
+      "answer": "**Cookie**：客户端存储机制，是**载体**。服务端通过 `Set-Cookie` 下发，浏览器自动携带到同域请求里。可设 `HttpOnly`（防 XSS 读取）、`Secure`（仅 HTTPS）、`SameSite`（防 CSRF）。\n\n**Session**：服务端存储机制。用户登录后服务端创建 Session 存在内存/Redis，返回 `JSESSIONID` 给客户端存在 Cookie 里。\n- 优点：服务端可控，能主动踢人。\n- 缺点：**有状态**，分布式下需要 Session 共享（存在 Redis 里）；跨域携带 Cookie 麻烦。\n\n**Token（泛指）**：服务端签发的一串凭证，客户端**手动**放在 `Authorization` 头里。\n\n**JWT（JSON Web Token）**：`Header.Payload.Signature` 三段 Base64。\n- **优点**：**无状态**，服务端不存储，天然适合水平扩展和微服务；跨域、跨端（App、小程序）友好。\n- **缺点（必须知道）**：\n  1. **无法主动失效**——签发后到期前一直有效。要撤销只能上黑名单（又变成有状态）。\n  2. **Payload 只是 Base64，不是加密的**，不要放敏感信息。\n  3. 体积比 SessionID 大，每个请求都带。\n\n**选型建议**：\n- 单体应用、需要强会话控制 → Session + Redis。\n- 分布式/微服务/多端 → JWT，**配合 Redis 存「已失效 token 黑名单」** 和**短期 access token + 长期 refresh token** 双 token 方案，兼顾无状态与可撤销。\n\n**安全要点**：\n- `alg: none` 攻击——服务端必须**指定**允许的签名算法，不要相信 header 里的 alg。\n- 签名密钥要足够强，不要用弱密钥（可被暴力破解后伪造任意 token）。"
+    },
+    {
+      "category": "network",
+      "title": "什么是跨域？CORS 是怎么解决的？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "跨域,CORS,同源策略,预检",
+      "answer": "**同源策略**：浏览器规定，**协议 + 域名 + 端口**三者完全相同才算同源。跨域限制的是**读取响应**，不是发送请求——请求其实发出去了，只是响应被浏览器拦下了。\n\n**注意**：同源策略是**浏览器的行为**，服务端之间、Postman、curl 都不受影响。\n\n**CORS（跨域资源共享）**：服务端通过响应头授权。\n\n**两类请求**：\n1. **简单请求**（GET/POST/HEAD，且 Content-Type 只限 `text/plain`、`application/x-www-form-urlencoded`、`multipart/form-data`，无自定义头）→ 浏览器直接发，检查响应头里的 `Access-Control-Allow-Origin`。\n2. **非简单请求**（PUT/DELETE、`application/json`、带自定义头）→ 先发 **`OPTIONS` 预检请求**，带上 `Access-Control-Request-Method` 和 `Access-Control-Request-Headers`；服务端返回允许的方法和头后，才发真实请求。\n\n**关键响应头**：\n```\nAccess-Control-Allow-Origin: https://example.com   # 不能与 credentials 同时用 *\nAccess-Control-Allow-Methods: GET,POST,PUT,DELETE\nAccess-Control-Allow-Headers: Content-Type,Authorization\nAccess-Control-Allow-Credentials: true             # 允许携带 Cookie\nAccess-Control-Max-Age: 3600                       # 预检结果缓存时间，减少 OPTIONS 请求\n```\n\n**带 Cookie 的跨域（重点）**：\n- 前端 `fetch` 要加 `credentials: 'include'`；\n- 服务端 `Access-Control-Allow-Origin` **必须是具体域名，不能用 `*`**；\n- 且需要 `Access-Control-Allow-Credentials: true`。\n\n**其他方案**：\n- **Nginx 反向代理**：把前后端都代理到同一域名下，**根本没有跨域**——这是生产环境的常规做法。\n- **Vite / Webpack devServer proxy**：开发环境常用。\n- **JSONP**：只支持 GET，古老方案，现在基本不用。\n\n**常见踩坑**：预检请求被 Spring Security 拦下返回 401 → 需要在安全配置里放行 `OPTIONS` 请求。"
+    },
+    {
+      "category": "os",
+      "title": "进程和线程的区别是什么？协程又是什么？",
+      "difficulty": 1,
+      "hot": 1,
+      "tags": "进程,线程,协程",
+      "answer": "**核心区别**：\n| 维度 | 进程 | 线程 |\n|---|---|---|\n| 定义 | 资源分配的基本单位 | **CPU 调度的基本单位** |\n| 地址空间 | 独立 | **共享进程的地址空间** |\n| 切换开销 | 大（要换页表、刷新 TLB） | 小（只换栈和寄存器） |\n| 通信 | 需要 IPC（管道、消息队列、共享内存） | 直接读写共享变量（需同步） |\n| 隔离性 | 强，一个崩溃不影响其他 | 弱，一个线程 OOM 会拖垮整个进程 |\n\n**一句话**：进程是「工厂」，线程是「车间里的工人」——工厂有独立的资源和地址空间，工人共享厂里的资源。\n\n**协程（Coroutine）**：\n- **用户态**的轻量级线程，**由程序自己调度**（不是操作系统），切换只涉及少量栈和寄存器，开销比线程小几个数量级。\n- **协作式**：靠代码显式 `yield` / `await` **主动让出**，不是被时间片抢占。\n- 优势：可以用极低开销支撑**百万级并发**（Go 的 goroutine、Java 21 的虚拟线程、Python asyncio）。\n- 代价：一个协程如果做了阻塞操作（如同步 IO）会卡住整个线程，所以要与异步 IO 配合使用；调试栈也更难读。\n\n**Java 21 的虚拟线程**是重大变化：由 JVM 调度，映射到少量**平台线程（载体线程）**上，遇到阻塞 IO 时会自动让出。好处是**可以用同步的写法获得异步的吞吐**，不再需要为每个请求开一个 OS 线程。"
+    },
+    {
+      "category": "os",
+      "title": "进程间通信（IPC）有哪些方式？",
+      "difficulty": 2,
+      "hot": 0,
+      "tags": "IPC,进程通信,管道,共享内存",
+      "answer": "**七种方式**：\n\n1. **管道（Pipe）**：半双工，只能用于**有亲缘关系**的进程（父子）。本质是内核里的一块缓冲区。\n2. **命名管道（FIFO）**：有路径名，**无亲缘关系的进程也能通信**。\n3. **消息队列**：内核维护的链表，**有格式、有类型**，可以按类型读取。缺点：数据要**拷贝两次**（用户 → 内核 → 用户）。\n4. **共享内存**：**最快的方式**——直接把同一块物理内存映射到两个进程的地址空间，**无需拷贝**。但**需要自己配合同步机制**（信号量）防止竞争。\n5. **信号量（Semaphore）**：主要用于**同步与互斥**，不是传数据的。PV 操作。\n6. **信号（Signal）**：异步通知，如 `SIGKILL`、`SIGTERM`。信息量极小，只是「通知发生了某件事」。\n7. **Socket**：**唯一能跨主机**的方式。本地也可以用 Unix Domain Socket（比 TCP 环回快）。\n\n**性能排序**：共享内存 > 管道/消息队列 > Socket。\n\n**延伸（Java 场景）**：\n- Java 里 `Thread` 共享内存，不存在 IPC 问题；`Process` 之间可以用输入输出流（本质是管道）。\n- 跨 JVM 常用 **Redis / MQ / RPC**——这些是「分布式 IPC」，比操作系统原语更重但可扩展。"
+    },
+    {
+      "category": "os",
+      "title": "用户态和内核态的区别？为什么要这么划分？",
+      "difficulty": 2,
+      "hot": 0,
+      "tags": "用户态,内核态,系统调用",
+      "answer": "**区别**：\n- **内核态（Ring 0）**：可以执行**特权指令**（关中断、操作硬件、访问任意内存），能访问所有资源。\n- **用户态（Ring 3）**：只能执行非特权指令，访问受限地址空间。\n\n**为什么划分**：**安全与稳定**。如果应用能随意操作硬件和内核内存，一个 bug 就能让整个系统崩溃。划分后，应用想干「大事」必须通过**系统调用**请求内核代劳。\n\n**用户态 → 内核态的三种途径**：\n1. **系统调用**（主动）：如 `read`、`write`、`open`、`fork`。\n2. **异常**（被动）：缺页异常、除零错误。\n3. **外围设备中断**（被动）：网卡收到数据、磁盘 IO 完成。\n\n**切换的代价**：\n- 保存/恢复寄存器上下文、切换内核栈。\n- **污染 CPU 缓存和 TLB**，导致后续访存变慢。\n- 典型耗时**几百纳秒到微秒级**。\n\n**这就是高性能系统的优化方向**：\n- **减少系统调用次数**：批量读写、`mmap` 代替 read/write。\n- **零拷贝**：`sendfile`、`splice` 让数据在内核内部流转，不来回拷贝到用户态。\n- **IO 多路复用**：`epoll` 一次系统调用管理成千上万个连接，而不是每个连接一次。\n- **DPDK / 用户态协议栈**：连网卡 IO 都搬到用户态，彻底绕开内核。\n\n**追问：一次 read 系统调用发生了什么？**\n用户态发起 → 保存上下文 → 切换到内核态 → 通过 fd 找到文件 → 从磁盘/缓存读数据到内核缓冲区 → **拷贝到用户缓冲区** → 切回用户态返回。**注意这里有一次额外的数据拷贝**（所以才有零拷贝优化）。"
+    },
+    {
+      "category": "os",
+      "title": "虚拟内存是什么？为什么需要它？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "虚拟内存,分页,页表,缺页",
+      "answer": "**定义**：每个进程都以为自己独占一整块连续的内存（如 32 位机器上是 4GB），实际由操作系统通过**页表**映射到物理内存。\n\n**四大好处**：\n1. **进程隔离与安全**：进程只能访问自己的虚拟地址空间，互相看不到（这是「一个进程崩溃不影响其他进程」的基础）。\n2. **突破物理内存限制**：内存不够时把不常用的页换出到磁盘（swap），程序能运行在比物理内存更大的地址空间上。\n3. **内存利用率高**：按需分页，只有真正访问到的页才加载；且内存碎片问题被抽象掉了。\n4. **共享**：多个进程可以把同一个物理页映射到各自的虚拟地址（共享库 `libc.so` 只需在内存中存一份）。\n\n**分页机制**：\n- 虚拟地址 = **页号 + 页内偏移**（常见页大小 4KB）。\n- 页表把虚拟页号映射到物理页帧号。\n- **多级页表**（x86-64 是四级）：为了省内存——如果是一级页表，4GB 空间需要 4MB 页表且必须连续；多级页表允许未使用的区域不分配页表页。\n- **TLB（快表）**：页表项的 CPU 缓存，避免每次访存都查内存中的页表。**TLB 未命中会显著变慢**，这也是「进程切换开销大」的原因之一（要刷 TLB）。\n\n**缺页异常（Page Fault）**：\n1. 访问的页不在物理内存 → 触发缺页异常，切换到内核态。\n2. 若页在磁盘上（swap 或文件）→ 从磁盘读入内存。\n3. 若物理内存满了 → 触发**页面置换**（LRU / Clock）。\n4. 更新页表，重新执行那条指令。\n\n**常见置换算法**：\n- **OPT**（最佳置换）：淘汰未来最晚被访问的，理想但不可实现，用作基准。\n- **FIFO**：简单，但可能出现 **Belady 异常**（物理块增多反而缺页率上升）。\n- **LRU**：淘汰最久未使用的，效果好但实现成本高（需要链表 + 哈希）。\n- **Clock（时钟）**：LRU 的近似实现，用一个访问位循环扫描，**实际系统最常用**。\n\n**相关（JVM 场景）**：JVM 的「页面」对应堆的分代和 Card Table；`-XX:+UseLargePages` 用大页（2MB/1GB）能减少 TLB 未命中，对大数据量应用有实测收益。"
+    },
+    {
+      "category": "os",
+      "title": "五种 IO 模型是什么？select、poll、epoll 有什么区别？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "IO模型,epoll,多路复用,select",
+      "answer": "**五种 IO 模型**：\n1. **阻塞 IO**：read 时进程阻塞，直到数据就绪并拷贝完成。\n2. **非阻塞 IO**：read 立即返回，没数据就返回 EAGAIN，需要**轮询**（烧 CPU）。\n3. **IO 多路复用**：`select`/`poll`/`epoll` 一次监听多个 fd，有就绪的再处理。**这是 Redis、Nginx、Netty 的基础**。\n4. **信号驱动 IO**：注册 SIGIO 回调，数据就绪时收到信号。实际很少用。\n5. **异步 IO（AIO）**：**内核把数据拷贝到用户缓冲区后**才通知你，整个过程无阻塞。Linux 原生 AIO 长期不成熟，**io_uring（5.1+）** 才是真正的异步方案。\n\n> **注意**：前四种都是**同步 IO**（因为「拷贝数据」这一步仍是阻塞的），只有第五种是异步的。这是高频陷阱题。\n\n**select / poll / epoll 对比**：\n\n| 维度 | select | poll | epoll |\n|---|---|---|---|\n| 数据结构 | 位图（fd_set） | 数组（pollfd） | 红黑树 + 就绪链表 |\n| fd 上限 | **1024**（FD_SETSIZE） | 无上限 | 无上限 |\n| 返回后 | 要**遍历全部 fd** 才知道谁就绪 | 同左 | **直接返回就绪链表** |\n| 每次调用 | 需**重新拷贝** fd 集合到内核 | 同左 | **一次注册，永久生效** |\n| 复杂度 | O(n) | O(n) | **O(1)**（获取就绪） |\n| 触发模式 | 水平触发 | 水平触发 | **支持 ET / LT** |\n\n**epoll 的两个触发模式**：\n- **LT（水平触发，默认）**：只要缓冲区还有数据就一直通知。编程简单，**不容易丢数据**。\n- **ET（边缘触发）**：只在状态**变化**时通知一次。**必须循环读到 EAGAIN 为止**，否则会丢数据。性能更高（减少系统调用），**Nginx 用 ET**。\n\n**为什么 epoll 快**：\n1. 只需在注册时把 fd 拷进内核一次（`epoll_ctl`），不是每次 `wait` 都拷。\n2. 内核用红黑树管理 fd，用就绪链表收集事件，`epoll_wait` 直接返回就绪的，**不需要遍历全部**。\n3. fd 多但活跃少时优势最明显（这正是 Web 服务器的典型负载）。"
+    },
+    {
+      "category": "os",
+      "title": "什么是零拷贝？Java 里怎么用？",
+      "difficulty": 3,
+      "hot": 0,
+      "tags": "零拷贝,mmap,sendfile,NIO",
+      "answer": "**传统文件发送的 4 次拷贝 + 4 次上下文切换**：\n```\n磁盘 → 内核缓冲区（DMA 拷贝）\n内核缓冲区 → 用户缓冲区（CPU 拷贝）\n用户缓冲区 → socket 缓冲区（CPU 拷贝）\nsocket 缓冲区 → 网卡（DMA 拷贝）\n```\n其中两次 CPU 拷贝是纯粹的浪费——应用根本没修改数据。\n\n**零拷贝的三种实现**：\n\n**1. mmap + write**\n把内核缓冲区**映射**到用户空间，应用和内核共享同一块内存。\n- 拷贝降到 3 次（省掉「内核 → 用户」那次），上下文切换 4 次。\n- **RocketMQ 用它读写 CommitLog**（还能配合 PageCache 预映射）。\n\n**2. sendfile**\n```java\ntransferTo(position, count, targetChannel);  // Java NIO 对 sendfile 的封装\n```\n数据**完全在内核内部流转**，不经过用户态。\n- 拷贝降到 3 次，上下文切换降到 **2 次**。\n- 若网卡支持 **SG-DMA（分散聚合）**，内核缓冲区只传**文件描述符和长度**给网卡，实现真正的 **2 次拷贝**。\n- **Kafka 用它做日志文件传输**——这是 Kafka 高吞吐的关键之一。\n\n**3. splice**\n通过管道在两个文件描述符之间移动数据，也不需要用户态参与。\n\n**Java 中的体现**：\n```java\n// Netty 的 FileRegion / NIO 的 FileChannel.transferTo\n// RocketMQ 的 MappedByteBuffer（mmap）\n```\n\n**代价与限制**：\n- `mmap` 有**缺页和刷盘不可控**的问题，文件被截断会触发 SIGBUS。\n- `sendfile` **无法在传输中修改数据**（要加密、压缩就不行）。\n- `mmap` 映射大文件时，堆外内存无法被 GC 精确管理。"
+    },
+    {
+      "category": "algorithm",
+      "title": "快速排序的原理是什么？时间复杂度是多少？如何避免最坏情况？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "快速排序,分治,双指针",
+      "answer": "**原理（分治）**：\n1. 选一个**基准值（pivot）**。\n2. **分区（partition）**：把小于 pivot 的放左边，大于的放右边。\n3. 对左右两个子区间**递归**。\n\n**核心是 partition**（双指针挖坑法）：\n```java\nint partition(int[] a, int lo, int hi) {\n    int pivot = a[lo];\n    int i = lo, j = hi;\n    while (i < j) {\n        while (i < j && a[j] >= pivot) j--;  // 从右找小的\n        a[i] = a[j];\n        while (i < j && a[i] <= pivot) i++;  // 从左找大的\n        a[j] = a[i];\n    }\n    a[i] = pivot;   // 基准归位\n    return i;\n}\n```\n\n**复杂度**：\n- 平均 **O(n log n)**，最坏 **O(n²)**，空间 O(log n)（递归栈）。\n- **不稳定**排序（相同元素的相对顺序可能变）。\n\n**最坏情况怎么来的**：数组**已经有序**且每次取首元素作 pivot → 每次只分出 0 和 n-1 两部分，递归深度退化到 n。\n\n**三种优化**：\n1. **随机化 pivot**：`swap(a[lo], a[lo + random(hi-lo+1)])`，让最坏情况的概率趋近于 0。\n2. **三数取中**：取 `lo`、`mid`、`hi` 三个位置的**中位数**作 pivot，对近乎有序的数据效果明显。\n3. **小区间插排 + 三路划分**：\n   - 子区间长度 < 某个阈值（如 10）时改用**插入排序**（小数组上更快）。\n   - 有大量重复元素时用**三路划分**（分成 `< pivot`、`== pivot`、`> pivot` 三段），一次就能把相等元素全部归位，避免重复元素导致的退化。\n\n**Java 的实现**：`Arrays.sort(int[])` 用**双轴快排（DualPivotQuicksort）**；`Arrays.sort(Object[])` 用 **TimSort**（归并的优化版，因为对象排序要求稳定）。"
+    },
+    {
+      "category": "algorithm",
+      "title": "二分查找的边界怎么写才不出错？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "二分查找,边界,模板",
+      "answer": "**二分的三个易错点**：区间开闭、循环条件、mid 的更新。\n\n**统一模板（左闭右闭，最不容易写错）**：\n```java\nint binarySearch(int[] a, int target) {\n    int lo = 0, hi = a.length - 1;       // 闭区间 [lo, hi]\n    while (lo <= hi) {                    // 闭区间用 <=\n        int mid = lo + (hi - lo) / 2;     // 防溢出，等价于 (lo+hi)/2\n        if (a[mid] == target) return mid;\n        else if (a[mid] < target) lo = mid + 1;   // mid 已经排除\n        else hi = mid - 1;\n    }\n    return -1;\n}\n```\n\n**关键要点**：\n1. **`mid = lo + (hi - lo) / 2`** 而不是 `(lo + hi) / 2`——后者在 lo、hi 都很大时会**整型溢出**。\n2. **闭区间用 `lo <= hi`**，开区间（`hi = a.length`）用 `lo < hi`。两者不能混着写。\n3. **更新时 `lo = mid + 1` / `hi = mid - 1`**，不是 `= mid`——否则 mid 不变会**死循环**。\n4. 循环结束时 `lo` 是**第一个大于等于 target 的位置**（下界），`hi = lo - 1` 是最后一个小于 target 的位置。\n\n**变体题（面试常考）**：\n- **找第一个等于 target 的下标**：`a[mid] >= target` 时 `hi = mid - 1`，最后检查 `lo` 是否越界且等于 target。\n- **找最后一个 ≤ target 的位置**：对称地处理。\n- **旋转数组找最小值**：比较 `a[mid]` 与 `a[hi]`。\n- **山峰数组找峰值**：比较 `a[mid]` 与 `a[mid+1]`。\n\n**复杂度**：O(log n)，最多循环 ⌈log₂n⌉ 次。"
+    },
+    {
+      "category": "algorithm",
+      "title": "如何用堆解决 TopK 问题？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "堆,TopK,优先队列",
+      "answer": "**问题**：从 N 个数里找最大的 K 个。\n\n**方案对比**：\n| 方案 | 复杂度 | 适用 |\n|---|---|---|\n| 全排序取前 K | O(N log N) | K 接近 N |\n| **小顶堆（推荐）** | **O(N log K)** | **K 远小于 N，流式数据** |\n| 快速选择（快排 partition） | 平均 O(N)，最坏 O(N²) | 数据都在内存、只求一次 |\n\n**小顶堆思路（反直觉但正确）**：找最大的 K 个，维护一个**容量为 K 的小顶堆**。\n1. 遍历元素，堆未满就放入。\n2. 堆满了，比较当前元素与**堆顶（当前 K 个里最小的）**：\n   - 如果比堆顶大 → 弹出堆顶，插入新元素。\n   - 否则忽略。\n3. 遍历结束后，堆里就是最大的 K 个。\n\n**为什么用小顶堆而不是大顶堆**：我们需要**快速淘汰当前最小值**，堆顶就是最小值，比较一次 O(1) 即可决定，替换 O(log K)。用大顶堆的话堆顶是最大值，没法判断该淘汰谁。\n\n**Java 实现**：\n```java\npublic int[] topK(int[] nums, int k) {\n    PriorityQueue<Integer> heap = new PriorityQueue<>(k);  // 默认小顶堆\n    for (int n : nums) {\n        if (heap.size() < k) {\n            heap.offer(n);\n        } else if (n > heap.peek()) {\n            heap.poll();\n            heap.offer(n);\n        }\n    }\n    return heap.stream().mapToInt(Integer::intValue).toArray();\n}\n```\n\n**为什么这个方案适合海量数据**：**只需要 O(K) 的内存**，可以处理「100 亿个数找 TopK」——数据从磁盘/网络流式读入，堆始终只有 K 个元素。\n\n**相关追问**：\n- **海量数据找中位数**：两个堆——大顶堆存较小的一半，小顶堆存较大的一半，保持两者大小差 ≤ 1，中位数就是堆顶。\n- **找第 K 大**：用小顶堆，堆顶即为答案。\n- **数据有重复 / 是字符串**：堆里存实际值或 id，字符串按字典序比较。"
+    },
+    {
+      "category": "algorithm",
+      "title": "动态规划怎么想？解题思路是什么？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "动态规划,DP,状态转移",
+      "answer": "**DP 的核心：把大问题拆成重叠的子问题，并缓存子问题的解避免重复计算。**\n\n**四步解题法**：\n1. **定义状态**：`dp[i]` 或 `dp[i][j]` 表示什么？这一步最难，**状态定义对了，方程自然出来**。\n   - 技巧：问自己「走到第 i 步时，我需要知道哪些信息才能做决策？」\n2. **找状态转移方程**：`dp[i]` 和 `dp[i-1]`、`dp[i-2]` 的关系。\n3. **确定初始条件和边界**：`dp[0]` 是多少？i 越界怎么处理？\n4. **确定遍历顺序**：**要保证用到的状态已经算出来了**（常见是从小到大，也有从大到小或用倒序防重复使用）。\n\n**经典例子 —— 爬楼梯（斐波那契）**：\n- 状态：`dp[i]` = 爬到第 i 阶的方法数。\n- 方程：`dp[i] = dp[i-1] + dp[i-2]`（要么从 i-1 走一步，要么从 i-2 走两步）。\n- 初始：`dp[0]=1, dp[1]=1`。\n- 顺序：i 从 2 到 n。\n- **空间优化**：只需要前两个值，可以用两个变量滚动，空间 O(1)。\n\n**经典例子 —— 0/1 背包**：\n- 状态：`dp[j]` = 容量为 j 时的最大价值。\n- 方程：`dp[j] = max(dp[j], dp[j-w[i]] + v[i])`。\n- **必须倒序遍历 j**（`j` 从大到小），否则同一物品会被用多次（退化成完全背包）。这是最经典的细节考点。\n\n**如何判断一道题该用 DP**：\n1. 求**最值**（最大/最小/最长/最少）或**方案数**。\n2. 有**重叠子问题**（朴素递归会重复计算）。\n3. 有**最优子结构**（最优解由子问题的最优解构成）。\n4. 决策有**无后效性**（当前决策不影响之前的状态）。\n\n**DP vs 贪心**：贪心每步取局部最优且**不回头**，只在能证明贪心选择性质时正确；DP 会**考虑所有选择**，更通用但更慢。\n\n**DP vs 分治**：分治的子问题**互相独立**（如归并排序）；DP 的子问题**重叠**。\n\n**答题建议**：面试时**先说状态定义和方程，再写代码**，不要上来就写。写完给个例子手动跑一遍验证边界。"
+    },
+    {
+      "category": "project",
+      "title": "介绍一下你最有挑战的一个项目？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "项目介绍,STAR,面试开场",
+      "answer": "**用 STAR 结构，控制在 2 分钟内**：\n\n**S（背景与目标）**：一句话说清业务场景与要解决的问题。避免上来就讲技术栈。\n> 例：「这是一个面向专科医生的临床指南问答系统。问题是医学指南动辄上百页 PDF，医生在门诊现场翻不到答案，我需要做一个能在 2 秒内给出带出处的答案的系统。」\n\n**T（你的职责）**：明确你负责的部分。\n> 「项目由我独立完成，我负责从文档解析、检索链路到接口服务的全部设计。」\n\n**A（关键动作与技术难点）**——**这是重头戏，要讲取舍而不是罗列技术**：\n> - 「PDF 解析我试了两个引擎，最终采用**双引擎**方案：文本型 PDF 用 X，扫描件走 OCR 兜底，因为……」\n> - 「检索上我没有只用向量检索，因为医学场景里**药品名、指标数值这类关键词必须精确命中**，所以做了 **BM25 + 向量混合检索**，再用 Reranker 精排……」\n> - 「分块策略改了三版，最终用**三级分块**（章节 → 段落 → 句子），原因是……」\n\n**R（结果，必须量化）**：\n> 「检索 P95 延迟从 1.8s 降到 480ms；SSE 流式输出首 token 1.2s；用 RAGAS 从四个维度评估，答案忠实度 0.89。」\n\n**三个加分点**：\n1. **量化结果**——没有数字的项目描述在面试官眼里等于没做。\n2. **讲取舍**——「我为什么不用 X」比「我用了 Y」更能体现判断力。\n3. **主动暴露一个不足**——「目前的局限是扫描件 OCR 准确率只有 85%，我下一步的方案是……」这显示你有复盘能力。\n\n**准备三个版本**：技术版（2 分钟，讲链路）、业务版（1 分钟，讲价值）、深挖版（针对每个技术点准备好被追问 3 层）。"
+    },
+    {
+      "category": "project",
+      "title": "RAG 系统的检索效果不好，你会从哪些方向优化？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "RAG,检索优化,混合检索,Reranker",
+      "answer": "**按链路分层排查，从上到下**：\n\n**1. 文档解析层**\n- PDF 抽取是否丢失了表格、公式、多栏排版的内容？\n- 用双引擎（文本层 + OCR）+ 版面分析。\n- 保留**章节层级信息**，为后面的分块提供依据。\n\n**2. 分块策略（chunking）**\n- 固定长度切分是最差的做法，会把一句话切成两半。\n- **按语义结构切**：章节 → 段落 → 句子，用递归字符切分器配合分隔符优先级。\n- **加重叠（overlap）**：chunk 之间留 10%~20% 重叠，避免答案跨边界时丢失。\n- **父子块（small-to-big）**：用小块做检索（精准），命中后返回它所在的大块（上下文完整）。\n- 给每个 chunk **补充元数据**（标题、来源、章节路径），检索时可以过滤，展示时可以给出处。\n\n**3. 检索层（收益最大的一层）**\n- **混合检索**：**BM25（关键词）+ 向量（语义）** 双路召回，用 RRF 融合排序。\n  - 为什么必须加 BM25：向量检索对**专有名词、编号、数值**不敏感（「阿司匹林」和「布洛芬」向量很近，但临床上是两回事）。\n- **查询改写**：多轮对话时把「它的副作用是什么」改写成带上下文的完整问题。\n- **查询扩展 / HyDE**：让 LLM 先生成一个假想答案，再用它去检索。\n- **多路召回 + 融合**：不同的 embedding 模型、不同的 chunk 粒度各召回一批，再合并。\n\n**4. 精排层**\n- **Reranker（交叉编码器）**：把 query 和 doc 拼接后一起过模型，精度远高于向量余弦相似度。典型做法是召回 50~100 条，Rerank 取 Top 5。\n- 主流选型：BGE-reranker、Cohere Rerank、bge-m3 配合。\n- 代价：**延迟会上升**，要控制候选集大小和 batch。\n\n**5. Embedding 模型**\n- 中文场景优先选**中文/多语言优化的模型**（BGE、M3E、text-embedding-3）。\n- 注意**对称 vs 非对称**检索：query 和 doc 可能要用不同的前缀。\n- **微调**：领域数据足够时，用对比学习微调 embedding 收益明显（医学、法律这类专业领域）。\n\n**6. 生成层**\n- **Prompt 约束**：「只根据提供的资料回答，资料中没有就说不知道，并给出引用编号」。\n- 控制上下文长度，把最相关的放**开头和结尾**（中间位置容易被忽略，即「lost in the middle」）。\n\n**7. 评估层（没有评估就没有优化）**\n- **RAGAS 四维指标**：\n  - `faithfulness` 忠实度：答案是否完全来自检索内容（防幻觉）。\n  - `answer_relevancy` 答案相关性。\n  - `context_precision` 上下文精度：召回的文档有多少是真正有用的。\n  - `context_recall` 上下文召回率：该有的文档有没有召回到。\n- **关键**：**context_recall 低是检索问题，faithfulness 低是生成问题**——这能直接定位优化方向。\n- 建立**标注测试集**（50~200 条问答对），每次改动都跑一遍，避免「感觉变好了」。"
+    },
+    {
+      "category": "project",
+      "title": "如何设计一个接口的幂等性？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "幂等,重复提交,分布式",
+      "answer": "**先明确**：幂等指的是**同一个请求执行多次，结果与执行一次相同**。查询天然幂等，**增删改需要额外设计**。\n\n**方案由轻到重**：\n\n**1. 唯一索引 / 唯一约束（最可靠）**\n数据库层兜底。如订单表用 `(user_id, out_trade_no)` 建唯一索引，重复插入直接报错。\n**这是最后一道防线，任何方案都应该配上它。**\n\n**2. Token 机制（前端防重复点击）**\n1. 进入页面时请求一个 token，服务端存 Redis。\n2. 提交时带上 token，服务端用 **Lua 脚本原子地「判断 + 删除」**。\n3. 第二次提交时 token 已不存在 → 拒绝。\n- **必须用 Lua**，否则「get 完再 del」之间存在竞态窗口。\n\n**3. 分布式锁**\n用业务主键（如订单号）做锁 key，同一请求串行执行。Redisson 的 `tryLock`。\n- 注意锁的过期时间要够长，或开看门狗续期。\n\n**4. 状态机（推荐用于订单类业务）**\n`UPDATE order SET status='PAID' WHERE id=? AND status='UNPAID'`\n- 靠**数据库的行锁 + 条件判断**保证只有第一次更新生效。\n- 影响行数为 0 就是重复请求。**简单、无额外组件**，非常适合状态流转类业务。\n\n**5. 去重表**\n单独建一张表记录已处理的请求 id（唯一索引），处理前先插入，插入失败说明重复。\n- 适合需要**长期记录**的场景（如支付流水）。\n- 缺点是每次都要写库，可配合定期归档。\n\n**6. 消息队列去重**\n消费端做去重（用消息 id + Redis SETNX），解决 MQ 的 **at-least-once** 语义。\n\n**选择依据**：\n- **前端防重**（解决 90% 的重复点击）→ Token\n- **状态流转类** → 状态机 + 唯一索引\n- **创建资源类** → 唯一索引 + Token\n- **跨服务调用** → 上游带业务唯一号，下游做去重表\n\n**面试加分**：主动说「幂等方案要和**重试机制**配套考虑——如果下游超时但实际成功了，上游重试就会产生重复，所以**超时重试必须带幂等键**」。"
+    },
+    {
+      "category": "project",
+      "title": "如何设计一个秒杀系统？",
+      "difficulty": 3,
+      "hot": 1,
+      "tags": "秒杀,高并发,限流,削峰",
+      "answer": "**核心矛盾**：瞬时超高并发，但**库存有限**。设计目标是「**把绝大多数流量挡在数据库之前**」。\n\n**分层设计**：\n\n**1. 前端层**\n- **按钮置灰 + 防重复提交**（点一次就禁用）。\n- **静态资源全部 CDN**，页面本身不查库存。\n- **答题/验证码**：拉长请求时间，把瞬时峰值摊平到几秒。\n\n**2. 网关 / 接入层**\n- **限流**：Nginx `limit_req`（漏桶）、Sentinel / 网关层令牌桶。按用户维度 + 全局维度双重限流。\n- **黑名单**：拦截脚本刷单（同一 IP/设备的高频请求）。\n- **动静分离**：秒杀商品详情页静态化，不落库。\n\n**3. 应用层**\n- **读多写少的部分全走缓存**：商品信息、库存预热到 Redis。\n- **库存扣减用 Redis + Lua 脚本**保证原子性：\n  ```lua\n  -- 先判断库存，再扣减，两步在同一脚本里原子执行\n  if tonumber(redis.call('get', KEYS[1])) > 0 then\n      redis.call('decr', KEYS[1]); return 1\n  end\n  return 0\n  ```\n  **绝不能「先 get 再 decr」**，两次网络往返之间有竞态。\n- **去重**：用 `SETNX user_id` 保证一个用户只能抢一单。\n- **MQ 削峰**：Redis 扣减成功后，把订单创建请求丢进 MQ，**异步落库**。\n  - 前端不等待下单结果，改为「排队中」，用**轮询/WebSocket 推送**结果。\n\n**4. 数据层**\n- **库存扣减最终一致性**：MQ 消费者落库时 `UPDATE stock SET count=count-1 WHERE id=? AND count>0`，用**数据库行锁兜底**（防止 Redis 数据丢失或超卖）。\n- **分库分表**：订单表按 user_id 分片。\n- **对账补偿**：定时任务核对 Redis 库存与 DB 库存，发现不一致则修正。\n\n**5. 防超卖的三个层次**\n1. Redis Lua 原子扣减（挡住绝大多数）\n2. DB 层的 `WHERE count > 0` 条件更新（兜底）\n3. 库存字段加 `UNSIGNED` 约束（负值直接报错，最后一道防线）\n\n**关键设计原则（面试时要说出来）**：\n- **漏斗原则**：每一层都要过滤掉一部分流量，最终到达 DB 的应该只有成功的那几十个请求。\n- **不要追求强一致**：秒杀是典型的**最终一致**场景，为了吞吐必须放弃实时准确。\n- **兜底思维**：每个环节都要问「如果这里挂了会怎样」。\n\n**追问：库存预热后 Redis 挂了怎么办？**\n秒杀期间重启 Redis 会导致库存丢失。做法是**库存同时存在 DB**，Redis 挂掉后降级为「直接走 DB 扣减」（性能下降但不会超卖），或直接熔断返回「活动火爆」。"
+    },
+    {
+      "category": "project",
+      "title": "一个接口响应很慢，你会怎么排查？",
+      "difficulty": 2,
+      "hot": 1,
+      "tags": "性能排查,接口优化,链路追踪",
+      "answer": "**先分层定位，不要直接猜代码**：\n\n**第 1 步：确定慢在哪一层**\n- **前端**？看浏览器 Network 的 TTFB（首字节时间）。TTFB 小说明是前端渲染慢；TTFB 大说明是服务端慢。\n- **网络**？traceroute / ping 看丢包延迟；是否经过多层代理。\n- **服务端**？继续往下。\n\n**第 2 步：服务端内部细分**\n- **接口整体耗时**：用 **Arthas 的 `trace`** 命令直接看方法调用链各节点的耗时：\n  ```bash\n  trace com.xxx.UserController getUser\n  ```\n  这是最快的定位方式——一眼看出是 DAO 慢还是远程调用慢。\n- **链路追踪**：有 SkyWalking / Jaeger 的话直接看 Trace，能定位到具体 span。\n- **加日志埋点**：在关键节点打时间戳（临时手段）。\n\n**第 3 步：常见的四类根因**\n\n**① 数据库慢**\n- 慢查询日志 + `EXPLAIN` 看执行计划，是否全表扫描、回表过多、用了 filesort。\n- **N+1 查询**：循环里查库（最经典）。改成批量查询。\n- 大数据量深分页、大事务、锁等待（`data_lock_waits`）。\n\n**② 缓存问题**\n- 缓存未命中率高 → 大量请求打到 DB。\n- 大 key 读取阻塞 Redis。\n- 缓存击穿导致瞬时全部回源。\n\n**③ 外部依赖慢**\n- 调用第三方接口没有设**超时**（默认可能无限等）→ 线程池被占满，整个服务雪崩。\n- **必须给所有远程调用设超时 + 熔断降级**（Sentinel / Hystrix / Resilience4j）。\n\n**④ 代码或资源问题**\n- 循环里做耗时操作、正则回溯、频繁对象创建导致 GC 频繁。\n- **线程池打满**：用 `jstack` 看线程是不是都卡在等待某个资源。\n- 日志打印过多（同步日志 + 大对象序列化）。\n\n**第 4 步：优化**\n1. **加缓存**（本地 + Redis 多级）。\n2. **异步化**：非核心逻辑（发通知、记日志、算积分）丢到 MQ 或线程池。\n3. **并行化**：多个独立的下游调用用 `CompletableFuture` 并行，总耗时取最慢的那个而不是累加。\n4. **批量化**：合并查询、批量写。\n5. **加索引 / 优化 SQL**。\n6. **限流降级**：保护系统本身。\n\n**面试加分**：说清「**排查顺序是自顶向下、由粗到细**，先用 trace 找到慢的环节，再深挖那一层，**不要一上来就读代码**」。"
+    },
+    {
+      "category": "project",
+      "title": "你平时是怎么学习新技术的？最近在研究什么？",
+      "difficulty": 1,
+      "hot": 1,
+      "tags": "学习能力,职业规划,开放题",
+      "answer": "**这题考察的是学习方法和自驱力，忌讳说空话**。\n\n**结构化的答法（三段）**：\n\n**1. 说方法（具体到动作）**\n> 「我的习惯是**先跑通再深挖**。拿到一个新技术，先照着官方 Quick Start 做一个最小可用 Demo，把它跑起来；然后带着问题去看源码和设计文档，比如我会问『它为什么这么设计』『它解决了上个方案的什么问题』。最后我会尝试用它做一个自己需要的小工具——**输出的过程才真正暴露理解的漏洞**。」\n\n**2. 说最近在做的（给具体例子）**\n这里要**结合你的实际情况讲一个真实的项目**，比如：\n> 「最近在做一个终端里的编程 Agent，过程中我重点研究了工具调用的延迟加载——一开始把几十个工具的 Schema 全塞进 system prompt，Token 占用极高且模型容易选错工具。我改成了**按需加载 + 两阶段选择**，Token 占用降了 85%。」\n\n**3. 说渠道和习惯**\n> 「主要看官方文档和 RFC 原文，配合 GitHub 上的 issue 和 PR 讨论——很多『为什么这样设计』的信息只在 issue 里。中文资料我会用来快速入门，但关键结论一定回原文核对。」\n\n**三个加分点**：\n1. **不要罗列技术名词**，面试官要听的是**你怎么学**，不是你**学了什么**。\n2. **展示「输出」**：写博客、做开源、把学到的东西用起来了——**有产出比有时间长度更有说服力**。\n3. **承认边界**：「这块我只用过，还没深入看过源码」——诚实比硬撑好得多，而且面试官接下来大概率会顺着问。\n\n**追问准备**：\n- 「最近看的最有收获的一篇技术文章是什么？讲了什么？」→ 提前准备一个具体的。\n- 「遇到看不懂的源码怎么办？」→ 断点调试、写最小复现、画流程图。"
+    },
+    {
+      "category": "project",
+      "title": "你还有什么想问我的吗？",
+      "difficulty": 1,
+      "hot": 1,
+      "tags": "反问,面试收尾",
+      "answer": "**这题不是走过场**——它是你展示「认真考虑过这份工作」的最后机会，也直接影响面试官对你的印象分。\n\n**一定要问，说「没有」是最差的选择。**\n\n**推荐问的（按优先级）**：\n\n**1. 关于团队与技术**\n- 「团队目前的技术栈和业务方向是怎样的？新人通常从什么样的事情入手？」\n- 「团队现在最想解决的技术难题是什么？」（显得你在关注真实问题）\n- 「代码评审、测试、发布的流程是怎样的？」（判断工程规范）\n\n**2. 关于成长**\n- 「实习期间，您希望我在三个月内达到什么样的状态？」（**最推荐**——把关注点放在产出而非待遇）\n- 「团队有导师制吗？带教方式大概是怎样的？」\n- 「这个岗位转正的机会和标准是什么？」（学生实习可以问）\n\n**3. 关于本次面试的反馈**\n- 「刚才我回答的 XX 问题，从您的角度看还有哪些可以补充的？」\n  **这个问法很加分**：显示你能接受反馈、有复盘意识。而且面试官往往会给你一些很有价值的真实反馈。\n\n**谨慎问的**：\n- 加班情况：可以问「团队的作息大概是怎样的」，但**不要一上来就问**，也不要在第一轮面试就问薪水和转正。\n- 薪资：等 HR 面或拿到意向再谈。\n\n**不要问的**：\n- 公司官网、招聘 JD 上能查到的信息（显得没做功课）。\n- 「我今天表现怎么样？能过吗？」（把面试官置于尴尬位置）。\n\n**收尾动作**：\n> 「谢谢您的时间。今天聊下来我对这个岗位有了更具体的了解，尤其是您提到的 XX，正是我想深入的方向。如果有后续流程，我随时可以配合。」\n\n**面试后 24 小时内**：如果对方留了联系方式，发一条简短的感谢消息，**提一个面试中聊到的具体技术点**（不要群发模板），这能显著提高印象分。"
+    }
+  ]
+}
