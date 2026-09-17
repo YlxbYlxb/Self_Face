@@ -9,8 +9,11 @@
 # "bad interpreter: No such file or directory"（\r 被当成解释器路径的一部分）
 *.sh text eol=lf
 
-# 其余文本按 LF 归一，避免不同平台反复产生无意义的换行 diff
-* text=auto
+# 其余文本一律 LF —— 连工作区也一起。
+# 只写 text=auto 是不够的：Windows 上 core.autocrlf=true 会把工作区文件转成 CRLF，
+# 而 Dockerfile 里的 \ 续行符遇到 CRLF 会解析异常、Caddyfile 的指令也会带上多余字符，
+# 这类问题只在构建时暴露且报错信息毫无指向性。
+* text=auto eol=lf
 
 # 二进制文件不做换行转换
 *.jar  binary
