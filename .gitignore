@@ -32,6 +32,15 @@ run.local.cmd
 # Vite 生成的临时配置快照
 frontend/vite.config.js.timestamp-*
 
+# 题库导入用的原始素材（PDF 等，体积大且多为第三方版权内容，不入库）
+pdf-inbox/
+scripts/.extract-cache/
+*.pdf
+
+# 小林coding 题库（作者声明禁止转载，仅供本地个人学习使用，不入公共仓库）
+# 由 scripts/import-xiaolincoding.py 生成，本地重新跑脚本即可复现
+backend/src/main/resources/seed/05-xiaolincoding.json
+
 # IDE
 .idea/
 .vscode/
