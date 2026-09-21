@@ -37,9 +37,13 @@ pdf-inbox/
 scripts/.extract-cache/
 *.pdf
 
-# 小林coding 题库（作者声明禁止转载，仅供本地个人学习使用，不入公共仓库）
-# 由 scripts/import-xiaolincoding.py 生成，本地重新跑脚本即可复现
-backend/src/main/resources/seed/05-xiaolincoding.json
+# 第三方题库数据：来源方声明禁止转载，仅供本地个人学习使用，不入公共仓库
+# 由 scripts/import-interview-pdf.py 生成，本地重新跑脚本即可复现
+backend/src/main/resources/seed/05-interview-pdf.json
+
+# Python 编译缓存
+__pycache__/
+*.pyc
 
 # IDE
 .idea/

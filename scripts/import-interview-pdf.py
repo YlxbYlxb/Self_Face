@@ -1,26 +1,30 @@
 """
-把小林coding《小林八股面试题汇总》PDF 系列转成 SelfFace 题库 seed 文件。
+把面试题 PDF 讲义转成 SelfFace 题库 seed 文件。
 
 背景
 ----
 题库需要持续增量维护，所以提取规则必须固化在脚本里，而不是靠人工一次性搬运。
 本脚本与 import-javaguide.py 是同一套思路的两个数据源适配：
 
-    源          结构            提取依据
-    JavaGuide   Markdown 标题   '#' 层级 + 题感比判定题集文件
-    小林coding   PDF 版面       字号层级（科目 / 章节 / 题目）+ 行间距
+    源            结构            提取依据
+    JavaGuide     Markdown 标题   '#' 层级 + 题感比判定题集文件
+    PDF 讲义      PDF 版面       字号层级（科目 / 章节 / 题目）+ 行间距
 
 用法
 ----
-    python scripts/import-xiaolincoding.py --src "D:\\八股\\小林coding图解网站合集PDF\\小林八股面试题汇总"
-    python scripts/import-xiaolincoding.py --only java            # 只跑一份，调试用
-    python scripts/import-xiaolincoding.py --dry-run              # 只统计不写文件
+    python scripts/import-interview-pdf.py                        # 默认读 pdf-inbox/
+    python scripts/import-interview-pdf.py --src "D:\\path\\to\\pdf"
+    python scripts/import-interview-pdf.py --only java            # 只跑一份，调试用
+    python scripts/import-interview-pdf.py --dry-run              # 只统计不写文件
     python scripts/check_seed.py                                  # 必须通过
+
+PDF 文件名不入代码：BANKS 里用的是通配匹配，换版本、换前缀都不影响。
+把 PDF 放进 `pdf-inbox/`（已 gitignore），或用 `--src` 指定目录。
 
 这个数据源特有的三个坑（都已在代码里处理，改动前请先读）
 --------------------------------------------------------
 1. **伪汉字**：PDF 字体子集把一批汉字编码到了「康熙部首区」(U+2E80-U+2FDF)，
-   例如 `⼩林` 实为 `小林`、`⾯试题` 实为 `面试题`。用 NFKC 逐字归一回常规汉字。
+   例如 `⼩` 实为 `小`、`⾯试题` 实为 `面试题`。用 NFKC 逐字归回常规汉字。
 
 2. **错字**：同一字体子集把「口」错映射成了「又」，`接口` 变成 `接又`、
    `哑口无言` 变成 `哑又无言`。这不是编码问题，NFKC 修不了，只能按词表替换。
@@ -61,12 +65,11 @@ MID_MIN = 17.5              # 中层：章节 / 知识点（也可能直接是�
 TOPIC_MIN = 15.0            # 题目标题
 
 SOURCE = {
-    "name": "小林coding 八股面试题汇总",
-    "url": "https://www.xiaolincoding.com/interview/",
-    "license": "版权归作者小林coding所有（语雀镜像标注「禁止转载」）",
-    "note": ("本文件由小林coding《八股面试题汇总》PDF 提取、改写为问答结构"
+    "name": "面试题 PDF 讲义合集",
+    "license": "版权归原作者所有，请勿转载或再分发。",
+    "note": ("本文件由本地 PDF 讲义提取、改写为问答结构"
              "（按字体层级切分题目、去除站内链接与推广章节、统一字段、部分答案做节选）。"
-             "内容版权归作者小林coding所有，仅供个人学习使用，未经授权不得转载或再分发。"),
+             "仅供个人本地学习使用，未经授权不得转载或再分发。"),
 }
 
 # 字体子集把「口」错映射成「又」：按词替换。顺序无所谓，但必须逐字精确。
@@ -168,11 +171,11 @@ TITLE_CAT_HINTS = [
 
 # 这些「看起来像标题、其实不是题目」的段落，直接跳过
 SKIP_TITLE = re.compile(
-    r"^(推荐学习|推荐阅读|参考资料|参考|小结|总结|写在最后|最后说几句|读者总结|小林总结|"
+    r"^(推荐学习|推荐阅读|参考资料|参考|小结|总结|写在最后|最后说几句|读者总结|"
     r"反问|感觉|感受|不足之处|问题记录|面试记录|面试总结|场景题|其他|"
     r"自我介绍|简历|项目|项目问题|项目介绍|智力题|"
     r"本文|目录|前言|关于|番外|广告|"
-    r"小林.{0,6}(训练营|私教|网站|简历)|.*(训练营|私教|课程|报名|公众号|扫码)|"
+    r".*(训练营|私教|课程|报名|公众号|扫码)|"
     r".{0,12}(面试篇|面试题|面试题全攻略|面试题汇总)$)"
 )
 
@@ -216,17 +219,20 @@ CAT_NAME.update({
 
 # ----------------------------------------------------------------------------
 # 数据源配置：每份 PDF 抽哪些科目、以及大厂面经的场次是否算题目来源
+#
+# 用通配匹配而不是写死文件名：文件名里通常带着来源标识与版本号，
+# 写死既会把来源信息带进代码、又会在换个版本后直接失效。
 # ----------------------------------------------------------------------------
 BANKS = [
-    {"key": "java", "file": "300道+Java面试题（Java基础+集合+并发+JVM+Spring）-小林coding-v2.0.pdf"},
-    {"key": "mysqlredis", "file": "150道MySQL+Redis面试题-小林coding-v2.0.pdf"},
-    {"key": "netos", "file": "150道计算机网络+操作系统+数据结构与算法面试题-小林coding-v2.0.pdf"},
-    {"key": "mqds", "file": "50道消息队列+分布式+系统设计-小林coding-v2.0.pdf"},
-    {"key": "linuxgit", "file": "30道Linux命令+Git面试题-小林coding-v2.0.pdf"},
-    {"key": "testdev", "file": "350道测试开发面试题-小林coding-v2.0.pdf"},
-    {"key": "cpp", "file": "100道+CPP面试题（基础+面向对象+STL+内存管理+新特性）-小林coding-v2.0.pdf"},
-    {"key": "golang", "file": "100道+Golang面试题（基础+数据类型+并发+GMP+内存管理+垃圾回收）-小林coding-v2.0.pdf"},
-    {"key": "exp", "file": "大厂后端面试真题-小林coding-白色.pdf"},
+    {"key": "java", "glob": "300道*Java面试题*.pdf"},
+    {"key": "mysqlredis", "glob": "150道*MySQL+Redis*.pdf"},
+    {"key": "netos", "glob": "150道*计算机网络*操作系统*.pdf"},
+    {"key": "mqds", "glob": "50道*消息队列*分布式*.pdf"},
+    {"key": "linuxgit", "glob": "30道*Linux*Git*.pdf"},
+    {"key": "testdev", "glob": "350道*测试开发*.pdf"},
+    {"key": "cpp", "glob": "100道*CPP*.pdf"},
+    {"key": "golang", "glob": "100道*Golang*.pdf"},
+    {"key": "exp", "glob": "大厂*面试真题*白色*.pdf"},
 ]
 
 QUESTION_PAT = re.compile(
@@ -614,7 +620,7 @@ def render_body(ans_rows: list[dict]) -> str:
         cut = text.rfind("\n\n", 0, MAX_ANSWER)
         if cut < MAX_ANSWER * 0.6:
             cut = MAX_ANSWER
-        text = text[:cut].rstrip() + "\n\n> （原文较长，此处为节选，完整内容见小林coding原文。）"
+        text = text[:cut].rstrip() + "\n\n> （原文较长，此处为节选。）"
     return text
 
 
@@ -667,7 +673,7 @@ def dedup(items: list[dict], existing: list[str], stats: Counter) -> list[dict]:
 # ----------------------------------------------------------------------------
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--src", default=r"D:\八股\小林coding图解网站合集PDF\小林八股面试题汇总")
+    ap.add_argument("--src", default=None, help="PDF 所在目录，默认 pdf-inbox/")
     ap.add_argument("--only", default=None, help="只处理某个 key（调试用）")
     ap.add_argument("--out", default=None)
     ap.add_argument("--dry-run", action="store_true")
@@ -677,26 +683,30 @@ def main() -> int:
     global DEBUG
     DEBUG = args.debug
 
-    src = pathlib.Path(args.src)
+    root = pathlib.Path(__file__).resolve().parent.parent
+    src = pathlib.Path(args.src) if args.src else root / "pdf-inbox"
     if not src.is_dir():
         print("[FAIL] 找不到 PDF 目录：%s" % src)
         return 1
 
-    root = pathlib.Path(__file__).resolve().parent.parent
     seed_dir = root / "backend" / "src" / "main" / "resources" / "seed"
-    out = pathlib.Path(args.out) if args.out else seed_dir / "05-xiaolincoding.json"
+    out = pathlib.Path(args.out) if args.out else seed_dir / "05-interview-pdf.json"
 
     stats = Counter()
     raw: list[dict] = []
     for bank in BANKS:
         if args.only and bank["key"] != args.only:
             continue
-        p = src / bank["file"]
-        if not p.exists():
-            print("[WARN] 缺少文件：%s" % bank["file"])
+        hits = sorted(src.glob(bank["glob"]))
+        if not hits:
+            print("[WARN] 缺少文件：%s" % bank["glob"])
             continue
+        if len(hits) > 1:
+            print("[WARN] %s 命中 %d 个文件，取第一个：%s"
+                  % (bank["glob"], len(hits), hits[0].name))
+        p = hits[0]
         got = parse_pdf(p, bank["key"], stats)
-        print("  %-12s %-58s -> %4d 道" % (bank["key"], bank["file"][:58], len(got)))
+        print("  %-12s %-58s -> %4d 道" % (bank["key"], p.name[:58], len(got)))
         raw.extend(got)
 
     existing = load_existing(seed_dir, out.name)
@@ -710,7 +720,6 @@ def main() -> int:
         tags = [t for t in (it["source_mid"], it["source_top"]) if t]
         if it.get("source_key") == "exp":
             tags.append("大厂面经")
-        tags.append("小林coding")
         it["tags"] = ",".join(dict.fromkeys(
             s.replace(",", " ").replace("，", " ") for s in tags))[:200]
 

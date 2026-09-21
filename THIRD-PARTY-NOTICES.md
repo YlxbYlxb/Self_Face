@@ -46,8 +46,8 @@ Apache License 2.0：<https://www.apache.org/licenses/LICENSE-2.0>
 | 来源 | <https://www.xiaolincoding.com/interview/> |
 | 作者 | 小林coding |
 | 许可 | 版权归作者所有（语雀镜像明确标注「禁止转载」），未给出开源许可 |
-| 使用位置 | `backend/src/main/resources/seed/05-xiaolincoding.json`（1380 道题） |
-| 提取脚本 | `scripts/import-xiaolincoding.py` |
+| 使用位置 | `backend/src/main/resources/seed/05-interview-pdf.json`（1380 道题） |
+| 提取脚本 | `scripts/import-interview-pdf.py` |
 | 仓库状态 | **该 seed 文件已在 `.gitignore` 中排除，不随仓库分发** |
 
 ### 为什么这个来源不随仓库分发
@@ -57,7 +57,7 @@ JavaGuide 走的是 Apache-2.0，允许转载与修改，所以 `04-javaguide.js
 把整份题库原样搬进一个公开仓库，已经超出「个人学习使用」的范围，
 因此这部分内容**只在本地数据库使用**，seed 文件不进版本库。
 
-脚本本身（`scripts/import-xiaolincoding.py`）留在仓库里，一是记录数据来源与提取规则，
+脚本本身（`scripts/import-interview-pdf.py`）留在仓库里，一是记录数据来源与提取规则，
 二是如果你在本地持有该 PDF，可以随时重新生成同一份题库。
 
 ### 改动说明
@@ -74,7 +74,7 @@ JavaGuide 走的是 Apache-2.0，允许转载与修改，所以 `04-javaguide.js
    （归一化精确匹配 / 相似度 ≥ 0.82 / 包含式）。
 6. **节选**：超过 6000 字的答案在段落边界截断，并注明「此处为节选」。
 
-> 提取规则全部固化在 `scripts/import-xiaolincoding.py` 中，可用同一份脚本复现。
+> 提取规则全部固化在 `scripts/import-interview-pdf.py` 中，可用同一份脚本复现。
 
 ---
 
